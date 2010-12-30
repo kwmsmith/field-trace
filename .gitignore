@@ -1,0 +1,5 @@
+build
+.lock-wafbuild
+.waf-*
+waf
+*.so
