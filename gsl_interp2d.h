@@ -16,27 +16,20 @@ typedef struct {
     gsl_spline *row_splines[];
     gsl_interp_accel *row_spline_accels[];
 
+    size_t col_spline_len;
     gsl_spline *col_spline;
     gsl_interp_accel *col_spline_accel;
 } interp2d_t;
 
 /* LAYOUT:
  *
- * COLS ----------------------------------->
- * (0,0) ----------------------------------> (0,NCOLS-1)  ROWS
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   |                                            |         |
- *   v                                            v         v
- * (NROWS-1,0) ---------------------------> (NROWS-1,NCOLS-1)
+ * COLS ------------------------->
+ * (0,0) -----------------> (0,NCOLS-1)        ROWS
+ *   |                           |               |
+ *   |                           |               |
+ *   |                           |               |
+ *   v                           v               |
+ * (NROWS-1,0) ----------> (NROWS-1,NCOLS-1)     v
  *
  */
 

@@ -45,7 +45,8 @@ interp2d_alloc(const gsl_interp_type *T, size_t nrows, size_t ncols)
     }
 
     /* col_spline and col_spline_accel */
-    interp2d->col_spline = gsl_spline_alloc(T, gsl_spline_min_size(interp2d->row_splines[0]));
+    interp2d->col_spline_len = gsl_spline_min_size(interp2d->row_splines[0]);
+    interp2d->col_spline = gsl_spline_alloc(T, interp2d->col_spline_len);
     if(NULL == interp2d->col_spline) {
         goto fail_accels;
     }
@@ -87,11 +88,44 @@ success:
 int
 interp2d_init(interp2d_t *interp2d, const double *xa, const double *ya, size_t nrows, size_t ncols)
 {
+    int status = 0;
+    size_t i;
+    if((nrows != interp2d->nrows) || (ncols != interp2d->ncols)) {
+        return 1;
+    }
+
+    for(i=0; i<interp2d->nrows; i++) {
+        status = gsl_spline_init(interp2d->row_splines[i], 
+                                 &xa[i*interp2d->ncols],
+                                 &ya[i*interp2d->ncols],
+                                 interp2d->ncols);
+        if(status) {
+            return status;
+        }
+    }
 }
 
 double
 interp2d_eval(const interp2d_t *interp2d, double x, double y)
 {
+    /* x is along the 1st axis, and specifies the row.
+     * y is along the 2nd axis, specifies the column.
+     */
+
+    int len = interp2d->col_spline_len;
+
+    /* make room for the xa and ya arrays */
+    double *xa = (double *)malloc(len*sizeof(double));
+    double *ya = (double *)malloc(len*sizeof(double));
+
+    /* get the indices of the col_spline_len rows */
+    int closest_int_x = (int)rint(x);
+    int i;
+    for(i=closest_int_x-(interp2d->col_spline_len/2); 
+        i<closest_int_x+(interp2d->col_spline_len/2)+1; i++) {
+        idx = i % interp2d->nrows;
+    }
+    !!! PICK UP FROM HERE !!!
 }
 
 void
