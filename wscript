@@ -27,6 +27,12 @@ def build(bld):
         use      = "NUMPY",
         )
 
+    bld(
+        features = 'c cshlib pyext',
+        source = 'bilinear.pyx',
+        target = 'bilinear',
+        )
+
 
 from waflib.Configure import conf
 @conf

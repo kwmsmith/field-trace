@@ -4,7 +4,7 @@ from nose.tools import set_trace
 from collections import defaultdict
 
 class NullCell(object):
-    
+
     def __init__(self, ax, ay, loc, size):
         if size not in (1,2):
             raise ValueError('argument size must be in (1,2)')
@@ -163,7 +163,7 @@ def remove_overlaps(cells):
     loc2cells = defaultdict(list)
     for cell in cells:
         loc2cells[cell.loc].append(cell)
-    
+
     cell2cluster = defaultdict(set)
     for cell in cells:
         cell2cluster[cell].add(cell)
@@ -191,7 +191,7 @@ def remove_overlaps(cells):
     clusters = dict((id(v), v) for v in cell2cluster.values()).values()
 
     reduced = []
-    
+
     for idx, cluster in enumerate(clusters[:]):
         onesize = [cell for cell in cluster if cell.size == 1]
         assert len(onesize) in (0,1)
