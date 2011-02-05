@@ -15,13 +15,20 @@ XIs = np.linspace(0.0, 10.0, num=10.0/0.01)
 YIs = [ii.eval(xi) for xi in XIs]
 
 # for (x,y) in zip(XIs, YIs):
-    # print "%g %g" % (x,y)
+    # print "%g %g %g" % (x,y,y2)
 
 N = 400
 arr = np.random.rand(N,N)
 
-i2d = Interp2D(arr)
+# i2d = Interp2D(arr)
+# for i in range(len(arr)):
+    # for j in range(len(arr[0])):
+        # assert np.allclose(i2d.eval(i, j), arr[i,j]), `(i,j,i2d.eval(i,j),arr[i,j])`
 
-for i in range(len(arr)):
-    for j in range(len(arr[0])):
-        assert np.allclose(i2d.eval(i, j), arr[i,j]), `(i,j,i2d.eval(i,j),arr[i,j])`
+import pylab as pl
+
+# pl.ion()
+pl.plot(X, Y)
+pl.plot(XIs, YIs)
+
+pl.show()

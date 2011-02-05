@@ -30,6 +30,7 @@ typedef struct {
     gsl_spline **row_splines;
     gsl_interp_accel **row_spline_accels;
 
+    size_t col_spline_len;
     gsl_spline *col_spline;
     gsl_interp_accel *col_spline_accel;
     double *col_spline_x;
