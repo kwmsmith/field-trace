@@ -45,7 +45,8 @@ interp2d_alloc(const gsl_interp_type *T, size_t nrows, size_t ncols)
     }
 
     /* col_spline and col_spline_accel */
-    interp2d->col_spline = gsl_spline_alloc(T, gsl_spline_min_size(interp2d->row_splines[0]));
+    /* interp2d->col_spline = gsl_spline_alloc(T, gsl_spline_min_size(interp2d->row_splines[0])); */
+    interp2d->col_spline = gsl_spline_alloc(T, nrows);
     if(NULL == interp2d->col_spline) {
         goto fail_accels;
     }
@@ -53,6 +54,8 @@ interp2d_alloc(const gsl_interp_type *T, size_t nrows, size_t ncols)
     if(NULL == (interp2d->col_spline_accel = gsl_interp_accel_alloc())) {
         goto fail_col_spline;
     }
+
+    interp2d->col_spline_x = (double*)malloc(nrows*sizeof(double));
 
     goto success;
 
@@ -84,14 +87,43 @@ success:
     return interp2d;
 }
 
+/* NOTE: x0[0..nrows-1] is an array of the coordinate values along the 0th dimension.
+ *       x1[0..ncols-1] is an array of the coordinate values along the 1st dimension.
+ *       ya[0..nrows, 0..ncols] is a 2D array of Y values, of shape NROWS x NCOLS.
+ */
 int
-interp2d_init(interp2d_t *interp2d, const double *xa, const double *ya, size_t nrows, size_t ncols)
+interp2d_init(interp2d_t *interp2d, const double *x0, const double *x1, const double *ya, size_t nrows, size_t ncols)
 {
+    int retval;
+    size_t i;
+    for(i=0; i<nrows; i++) {
+        interp2d->col_spline_x = x0[i];
+        if(retval = gsl_spline_init(interp2d->row_splines[i], x1, &(ya[ncols*i]), ncols))
+            return retval;
+    }
 }
 
 double
 interp2d_eval(const interp2d_t *interp2d, double x, double y)
 {
+    double *calc_y = NULL;
+    double retval;
+    size_t i;
+    calc = (double*)malloc(nrows*sizeof(double));
+    /* this is slower than it needs to be... */
+    /* shouldn't go through *all* of the rows to get necessary data... */
+    for(i=0; i<interp2d->nrows; i++)
+        calc[i] = gsl_spline_eval(interp2d->row_splines[i], y, interp2d->row_spline_accels[i]);
+
+    /* FIXME: no error checking here */
+    gsl_spline_init(interp2d->col_spline, interp2d->col_spline_x, calc, nrows);
+
+    retval = gsl_spline_eval(interp2d->col_spline, x, interp2d->col_spline_accel);
+
+    if(calc)
+        free(calc);
+
+    return retval;
 }
 
 void
@@ -102,6 +134,10 @@ interp2d_free(interp2d_t *interp2d)
     size_t ncols = interp2d->ncols;
 
     if(interp2d) {
+        if(interp2d->col_spline_x) {
+            free(interp2d->col_spline_x);
+            interp2d->col_spline_x = NULL;
+        }
         if(interp2d->col_spline_accel) {
             free(interp2d->col_spline_accel);
             interp2d->col_spline_accel = NULL;
