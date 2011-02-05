@@ -23,7 +23,18 @@ def build(bld):
         target   = 'wrap_gsl_interp',
         includes = '/opt/local/include',
         lib      = 'gsl gslcblas',
-        libpath = '/opt/local/lib',
+        libpath = '/Library/Frameworks/EPD64.framework/Versions/Current/lib /opt/local/lib',
+        use      = "NUMPY",
+        )
+
+    bld(
+        features = 'c cshlib pyext',
+        source   = 'gsl_interp2d.c wrap_gsl_interp2d.pyx',
+        target   = 'wrap_gsl_interp2d',
+        includes = '.. /opt/local/include',
+        lib      = 'gsl gslcblas',
+        # libpath = '/Library/Frameworks/EPD64.framework /opt/local/lib',
+        libpath = '/Users/ksmith/lib',
         use      = "NUMPY",
         )
 
@@ -34,8 +45,7 @@ def check_numpy_version(conf, minver, maxver=None):
     conf.start_msg("Checking numpy version")
     minver = tuple(minver)
     if maxver: maxver = tuple(maxver)
-    (np_ver_str,) = conf.get_python_variables(conf.env['PYTHON'],
-            ['numpy.version.short_version'], ['import numpy'])
+    (np_ver_str,) = conf.get_python_variables(['numpy.version.short_version'], imports=['import numpy'])
     np_ver = tuple([int(x) for x in np_ver_str.split('.')])
     if np_ver < minver or (maxver and np_ver > maxver):
         conf.end_msg(False)
@@ -46,8 +56,7 @@ def check_numpy_version(conf, minver, maxver=None):
 @conf
 def get_numpy_includes(conf):
     conf.start_msg("Checking numpy includes")
-    (np_includes,) = conf.get_python_variables(conf.env['PYTHON'],
-            ['numpy.get_include()'], ['import numpy'])
+    (np_includes,) = conf.get_python_variables(['numpy.get_include()'], imports=['import numpy'])
     conf.env.INCLUDES_NUMPY = np_includes
     conf.end_msg('ok (%s)' % np_includes)
 
