@@ -41,6 +41,14 @@ typedef struct {
     double *col_spline_y;
 } interp2d_t;
 
+    interp2d_t *
+interp2d_make_periodic(
+        const double x0max,
+        const double x1max,
+        const double *arr,
+        const size_t nrows,
+        const size_t ncols);
+
 interp2d_t *
 interp2d_alloc(const gsl_interp_type *row_type, 
         const gsl_interp_type *col_type,
