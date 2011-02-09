@@ -16,11 +16,12 @@ def configure(conf):
     conf.load('cython')
 
 def build(bld):
-    # first try to build a C-based cython extension
+    cflags = "-Wall -O3"
+
     bld(
         features = 'c cshlib pyext',
         source   = 'wrap_gsl_interp.pyx',
-        cflags   = '-O3',
+        cflags   = cflags,
         target   = 'wrap_gsl_interp',
         includes = '/opt/local/include',
         lib      = 'gsl gslcblas',
@@ -31,7 +32,7 @@ def build(bld):
     bld(
         features = 'c cshlib pyext',
         source   = 'gsl_interp2d.c wrap_gsl_interp2d.pyx',
-        cflags   = '-O3',
+        cflags   = cflags,
         target   = 'wrap_gsl_interp2d',
         includes = '.. /opt/local/include',
         lib      = 'gsl gslcblas',
@@ -43,7 +44,7 @@ def build(bld):
     bld(
         features = 'c cshlib pyext',
         source = 'bilinear.pyx',
-        cflags = '-O3',
+        cflags = cflags,
         target = 'bilinear',
         )
 

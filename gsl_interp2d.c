@@ -11,7 +11,6 @@
 interp2d_alloc(const gsl_interp_type *row_type, const gsl_interp_type *col_type, size_t nrows, size_t ncols)
 {
     int i;
-    gsl_spline *tmp_spline = NULL;
 
     /* the interp2d struct */
     interp2d_t *interp2d = (interp2d_t *) malloc(sizeof(interp2d_t));
@@ -103,7 +102,7 @@ interp2d_init(
     interp2d->max_x1 = max_x1;
     for(i=0; i<interp2d->nrows; i++) {
         interp2d->global_x0[i] = x0[i];
-        if(retval = gsl_spline_init(interp2d->row_splines[i], x1, &(ya[interp2d->ncols*i]), interp2d->ncols)) {
+        if((retval = gsl_spline_init(interp2d->row_splines[i], x1, &(ya[interp2d->ncols*i]), interp2d->ncols))) {
             return retval;
         }
     }
@@ -113,8 +112,8 @@ interp2d_init(
     double
 interp2d_eval(const interp2d_t *interp2d, double x, double y)
 {
-
-    long x0_idx, lower_idx, upper_idx, i, idx, norm_idx;
+    double retval;
+    long x0_idx, lower_idx, upper_idx, i, idx;
 
     /* NOTE: should the interp2d->nrows be instead `interp2d->nrows-1` ??
      */
@@ -129,7 +128,6 @@ interp2d_eval(const interp2d_t *interp2d, double x, double y)
 
     /* initialize col_spline_x
      */
-    printf("%ld %f: ", x0_idx, x);
     for(i=0, idx=lower_idx; idx<=upper_idx; i++, idx++) {
         if(idx < 0) {
             interp2d->col_spline_x[i] = interp2d->global_x0[idx + interp2d->nrows] - interp2d->max_x0;
@@ -138,9 +136,7 @@ interp2d_eval(const interp2d_t *interp2d, double x, double y)
         } else {
             interp2d->col_spline_x[i] = interp2d->global_x0[idx];
         }
-        printf("%f ", interp2d->col_spline_x[i]);
     }
-    printf("\n");
 
     /* set col_spline_y array.
      */
@@ -161,27 +157,7 @@ interp2d_eval(const interp2d_t *interp2d, double x, double y)
             interp2d->col_spline_len);
 
     gsl_interp_accel_reset(interp2d->col_spline_accel);
-    return gsl_spline_eval(interp2d->col_spline, x, interp2d->col_spline_accel);
-}
-
-    double
-__interp2d_eval(const interp2d_t *interp2d, double x, double y)
-{
-    double retval;
-    size_t i;
-    /* FIXME: this is slower than it needs to be... 
-     * shouldn't go through *all* of the rows to get necessary data... 
-     */
-    for(i=0; i<interp2d->col_spline_len; i++)
-        interp2d->col_spline_y[i] = gsl_spline_eval(interp2d->row_splines[i], y, interp2d->row_spline_accel);
-
-    /* FIXME: no error checking here */
-    gsl_spline_init(interp2d->col_spline, interp2d->col_spline_x, interp2d->col_spline_y, interp2d->col_spline_len);
-
-    /* FIXME: no error checking here */
-    gsl_interp_accel_reset(interp2d->col_spline_accel);
     retval = gsl_spline_eval(interp2d->col_spline, x, interp2d->col_spline_accel);
-
     return retval;
 }
 
@@ -190,7 +166,6 @@ interp2d_free(interp2d_t *interp2d)
 {
     int i;
     size_t nrows = interp2d->nrows;
-    size_t ncols = interp2d->ncols;
 
     if(interp2d) {
         if(interp2d->global_x0) {
