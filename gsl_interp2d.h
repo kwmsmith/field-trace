@@ -28,21 +28,31 @@ typedef struct {
      * size of `ncols`.
      */
     gsl_spline **row_splines;
-    gsl_interp_accel **row_spline_accels;
+    gsl_interp_accel *row_spline_accel;
+
+    double *global_x0;
+    double max_x0, max_x1;
 
     size_t col_spline_len;
     gsl_spline *col_spline;
     gsl_interp_accel *col_spline_accel;
+
     double *col_spline_x;
+    double *col_spline_y;
 } interp2d_t;
 
 interp2d_t *
-interp2d_alloc(const gsl_interp_type *T, size_t nrows, size_t ncols);
+interp2d_alloc(const gsl_interp_type *row_type, 
+        const gsl_interp_type *col_type,
+        size_t nrows, size_t ncols);
 
 int
 interp2d_init(interp2d_t *interp2d, 
-        const double *x0, const double *x1, 
-        const double *ya, size_t nrows, size_t ncols);
+        const double *x0, 
+        const double max_x0,
+        const double *x1, 
+        const double max_x1,
+        const double *ya);
 
 double
 interp2d_eval(const interp2d_t *interp2d, double x, double y);

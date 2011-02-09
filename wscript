@@ -20,6 +20,7 @@ def build(bld):
     bld(
         features = 'c cshlib pyext',
         source   = 'wrap_gsl_interp.pyx',
+        cflags   = '-O3',
         target   = 'wrap_gsl_interp',
         includes = '/opt/local/include',
         lib      = 'gsl gslcblas',
@@ -30,6 +31,7 @@ def build(bld):
     bld(
         features = 'c cshlib pyext',
         source   = 'gsl_interp2d.c wrap_gsl_interp2d.pyx',
+        cflags   = '-O3',
         target   = 'wrap_gsl_interp2d',
         includes = '.. /opt/local/include',
         lib      = 'gsl gslcblas',
@@ -41,6 +43,7 @@ def build(bld):
     bld(
         features = 'c cshlib pyext',
         source = 'bilinear.pyx',
+        cflags = '-O3',
         target = 'bilinear',
         )
 
