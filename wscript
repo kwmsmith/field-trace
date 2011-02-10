@@ -16,38 +16,7 @@ def configure(conf):
     conf.load('cython')
 
 def build(bld):
-    cflags = "-Wall -O3"
-
-    bld(
-        features = 'c cshlib pyext',
-        source   = 'wrap_gsl_interp.pyx',
-        cflags   = cflags,
-        target   = 'wrap_gsl_interp',
-        includes = '/opt/local/include',
-        lib      = 'gsl gslcblas',
-        libpath = '/Library/Frameworks/EPD64.framework/Versions/Current/lib /opt/local/lib',
-        use      = "NUMPY",
-        )
-
-    bld(
-        features = 'c cshlib pyext',
-        source   = 'gsl_interp2d.c wrap_gsl_interp2d.pyx',
-        cflags   = cflags,
-        target   = 'wrap_gsl_interp2d',
-        includes = '.. /opt/local/include',
-        lib      = 'gsl gslcblas',
-        # libpath = '/Library/Frameworks/EPD64.framework /opt/local/lib',
-        libpath = '/Users/ksmith/lib',
-        use      = "NUMPY",
-        )
-
-    bld(
-        features = 'c cshlib pyext',
-        source = 'bilinear.pyx',
-        cflags = cflags,
-        target = 'bilinear',
-        )
-
+    bld.recurse('src')
 
 from waflib.Configure import conf
 @conf

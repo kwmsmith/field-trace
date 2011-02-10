@@ -3,3 +3,5 @@ build
 .waf-*
 waf
 *.so
+test/nosetests
+kaw_analysis
