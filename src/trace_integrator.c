@@ -1,5 +1,6 @@
 #include "trace_integrator.h"
 
+#include <assert.h>
 #include <stdio.h>
 
     static double
@@ -23,6 +24,7 @@ make_params(const double x0max,
         interp2d_t *interp2d_v1)
 {
     params_t *params = (params_t*)malloc(sizeof(params_t));
+
 
     /* FIXME: error checking of the above allocation */
 

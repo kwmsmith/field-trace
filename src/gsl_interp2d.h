@@ -1,3 +1,6 @@
+#ifndef __GSL_INTERP2D_H__
+#define __GSL_INTERP2D_H__
+
 #include <stdlib.h>
 
 #include "gsl/gsl_spline.h"
@@ -67,3 +70,5 @@ interp2d_eval(const interp2d_t *interp2d, double x, double y);
 
 void
 interp2d_free(interp2d_t *interp2d);
+
+#endif

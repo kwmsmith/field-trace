@@ -1,8 +1,17 @@
+
+def configure(conf):
+    print "in src/configure"
+    conf.env.CFLAGS = "-Wall -O3".split()
+    conf.env.INCLUDES = "../src /opt/local/include".split()
+    conf.env.LIB      = "gsl gslcblas".split()
+    conf.env.LIBPATH = '/Users/ksmith/lib'
+    conf.env.CYTHONFLAGS = "-I../src"
+
 def build(bld):
-    cflags = "-Wall -O3"
-    includes = '../src /opt/local/include'
-    lib = 'gsl gslcblas'
-    libpath = '/Users/ksmith/lib'
+    # cflags = "-Wall -O3"
+    # includes = '../src /opt/local/include'
+    # lib = 'gsl gslcblas'
+    # libpath = '/Users/ksmith/lib'
 
     # bld(
         # features = 'c cshlib pyext',
@@ -26,24 +35,25 @@ def build(bld):
         features = 'c cshlib pyext',
         source   = 'gsl_interp2d.c wrap_gsl_interp2d.pyx',
         target   = 'wrap_gsl_interp2d',
-        cflags   = cflags,
-        includes = includes,
-        lib      = lib,
+        # cflags   = cflags,
+        # includes = includes,
+        # lib      = lib,
         # libpath = '/Library/Frameworks/EPD64.framework /opt/local/lib',
-        libpath = libpath,
+        # libpath = libpath,
         use      = "NUMPY",
         )
 
     bld(
-        features = 'c cshlib',
+        features = 'c cshlib pyext',
         # this is a workaround; shouldn't have to recompile gsl_interp2d.c here...
-        source = 'gsl_interp2d.c trace_integrator.c',
-        target = 'trace_integrator',
-        cflags = cflags,
-        includes = includes,
-        lib      = lib,
-        libpath = libpath,
+        source = 'gsl_interp2d.c trace_integrator.c wrap_trace_integrator.pyx',
+        target = 'wrap_trace_integrator',
+        # cflags = cflags,
+        # includes = includes,
+        # lib      = lib,
+        # libpath = libpath,
         # use = "wrap_gsl_interp2d",
+        use = "NUMPY",
         )
 
 # vim:ft=python

@@ -14,6 +14,7 @@ def configure(conf):
     conf.check_numpy_version(minver=(1,3))
     conf.get_numpy_includes()
     conf.load('cython')
+    conf.recurse('src')
 
 def build(bld):
     bld.recurse('src')
