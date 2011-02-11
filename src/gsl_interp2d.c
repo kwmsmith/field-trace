@@ -20,6 +20,12 @@ interp2d_make_periodic(const double x0max, const double x1max, const double *arr
         return NULL;
     }
 
+    /* DEBUG */
+    if(NULL == arr) {
+        printf("***** arr is NULL!!! *****\n");
+    }
+    /* DEBUG */
+
     /* Initialize arr_periodic_y array.  
      * 1D interpolation in gsl requires periodic interpolation to have the
      * first and last values of the X & Y arrays equal to each other.  The 2D
@@ -32,7 +38,8 @@ interp2d_make_periodic(const double x0max, const double x1max, const double *arr
             arr_periodic_y[IDX(i,j,ncols_periodic)] = arr[IDX(i,j,ncols)];
         }
         /* set the last element in the column dimension. */
-        arr_periodic_y[IDX(i,ncols_periodic-1,ncols_periodic)] = arr_periodic_y[IDX(i,0,ncols_periodic)];
+        arr_periodic_y[IDX(i,ncols_periodic-1,ncols_periodic)] =
+                arr_periodic_y[IDX(i,0,ncols_periodic)];
     }
 
     /* Set-up the coordinate indices for the 0th and 1st dimensions -- x0 and
@@ -78,14 +85,35 @@ fail_alloc_interp2d:
 fail_coordinates:
     if(x0) {
         free(x0);
+        x0 = NULL;
     }
     if(x1) {
         free(x1);
+        x1 = NULL;
     }
     if(arr_periodic_y) {
         free(arr_periodic_y);
+        arr_periodic_y = NULL;
     }
     return interp2d;
+}
+
+    void
+rowsplines_free(interp2d_t *interp2d) {
+
+    size_t i;
+    size_t nrows = interp2d->nrows;
+
+    if(interp2d->row_splines) {
+        for(i=0; i<nrows; i++) {
+            if(interp2d->row_splines[i]) {
+                gsl_spline_free(interp2d->row_splines[i]);
+                interp2d->row_splines[i] = NULL;
+            }
+        }
+        free(interp2d->row_splines);
+        interp2d->row_splines = NULL;
+    }
 }
 
 
@@ -143,24 +171,22 @@ interp2d_alloc(const gsl_interp_type *row_type, const gsl_interp_type *col_type,
     goto success;
 
 fail_col_spline:
-    free(interp2d->col_spline);
-    interp2d->col_spline = NULL;
-fail_accel:
-    if(interp2d->row_spline_accel)
-        gsl_interp_accel_free(interp2d->row_spline_accel);
-    interp2d->row_spline_accel = NULL;
-fail_rowsplines:
-    for(i=0; i<nrows; i++) {
-        if(interp2d->row_splines[i]) {
-            gsl_spline_free(interp2d->row_splines[i]);
-            interp2d->row_splines[i] = NULL;
-        }
+    if(interp2d->col_spline) {
+        gsl_spline_free(interp2d->col_spline);
+        interp2d->col_spline = NULL;
     }
-    free(interp2d->row_splines);
-    interp2d->row_splines = NULL;
+fail_accel:
+    if(interp2d->row_spline_accel) {
+        gsl_interp_accel_free(interp2d->row_spline_accel);
+        interp2d->row_spline_accel = NULL;
+    }
+fail_rowsplines:
+    rowsplines_free(interp2d);
 fail_rowsplines_arr:
-    free(interp2d);
-    interp2d = NULL;
+    if(interp2d) {
+        free(interp2d);
+        interp2d = NULL;
+    }
 success:
     return interp2d;
 }
@@ -242,8 +268,6 @@ interp2d_eval(const interp2d_t *interp2d, double x, double y)
     void
 interp2d_free(interp2d_t *interp2d)
 {
-    int i;
-    size_t nrows = interp2d->nrows;
 
     if(interp2d) {
         if(interp2d->global_x0) {
@@ -259,27 +283,18 @@ interp2d_free(interp2d_t *interp2d)
             interp2d->col_spline_y = NULL;
         }
         if(interp2d->col_spline_accel) {
-            free(interp2d->col_spline_accel);
+            gsl_interp_accel_free(interp2d->col_spline_accel);
             interp2d->col_spline_accel = NULL;
         }
         if(interp2d->col_spline) {
-            free(interp2d->col_spline);
+            gsl_spline_free(interp2d->col_spline);
             interp2d->col_spline = NULL;
         }
         if(interp2d->row_spline_accel) {
             gsl_interp_accel_free(interp2d->row_spline_accel);
             interp2d->row_spline_accel = NULL;
         }
-        if(interp2d->row_splines) {
-            for(i=0; i<nrows; i++) {
-                if(interp2d->row_splines[i]) {
-                    gsl_spline_free(interp2d->row_splines[i]);
-                    interp2d->row_splines[i] = NULL;
-                }
-            }
-            free(interp2d->row_splines);
-            interp2d->row_splines = NULL;
-        }
+        rowsplines_free(interp2d);
         free(interp2d);
         interp2d = NULL;
     }
