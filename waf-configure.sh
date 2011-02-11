@@ -3,5 +3,5 @@
 
 (./waf distclean && \
 PYTHON=/Library/Frameworks/EPD64.framework/Versions/Current/bin/python \
-CYTHON=/Library/Frameworks/EPD64.framework/Versions/Current/bin/cython \
+CYTHON=~/.local/bin/cython \
 ./waf configure)
