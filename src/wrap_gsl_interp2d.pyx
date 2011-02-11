@@ -3,7 +3,11 @@ cdef class Interp2DPeriodic:
     def __cinit__(self,
                   double x0max, double x1max,
                   np.ndarray[double, ndim=2] arr):
-        self.interp2d = interp2d_make_periodic(x0max, x1max, <double*>arr.data, arr.shape[0], arr.shape[1])
+        self.interp2d = \
+                interp2d_make_periodic(x0max, x1max,
+                                       <double*>arr.data,
+                                       <size_t>arr.shape[0],
+                                       <size_t>arr.shape[1])
         if not self.interp2d:
             raise RuntimeError("failed to make an interp2d object")
 
