@@ -34,9 +34,8 @@ def test_ti():
     positions = np.empty(2*ntracers, dtype=np.double)
     positions[::2] = np.linspace(0.0, nn, ntracers)
     positions[1::2] = np.linspace(0.0, nn, ntracers)
-    print positions
 
-    times = np.linspace(0.0, 50.0, 1000)
+    times = np.linspace(0.0, 50.0, 10)
 
     positions_vs_t = []
 
@@ -46,7 +45,7 @@ def test_ti():
         ti.evolve(t=t_init, t1=time, h=1.0e-6, y=positions)
         t_init = time
 
-    if 1:
+    if 0:
         pl.ion()
         dta = np.array(positions_vs_t)
         pl.imshow(arr)
