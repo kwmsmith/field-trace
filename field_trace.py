@@ -231,3 +231,15 @@ def _remove_overlaps(cells):
 
     uniq_cells = set(covered2cells.values())
     return list(uniq_cells)
+
+def eigsystem(psi_12, psi_22, psi_11, x1, x2):
+    'The psi_NN are interpolator objects to be evaluated at position (x1, x2).'
+
+    from numpy.linalg import eig
+
+    psi_12_val = psi_12.eval(x1, x2)
+    lin_matrix = np.array(
+            [[psi_12_val,            psi_22.eval(x1, x2)],
+             [-psi_11.eval(x1, x2), -psi_12_val         ]])
+    evals, evecs = eig(lin_matrix)
+    return evals, evecs
