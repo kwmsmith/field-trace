@@ -36,8 +36,11 @@ cdef extern from "trace_integrator.h":
 
     void trace_integrator_free(integrator_t *i)
 
+    int trace_integrator_evolve(integrator_t *i, double *t, double t1, double *h, double *y)
+
 
 from wrap_gsl_interp2d cimport Interp2DPeriodic
+cimport numpy as np
 
 cdef class TraceIntegrator:
 

@@ -45,6 +45,17 @@ params_free(params_t *params)
         free(params);
 }
 
+    int
+test_func(double t, const double y[], double f[],
+      void *v_params)
+{
+    params_t *params = (params_t *)v_params;
+    double mu = params->scale;
+    f[0] = y[1];
+    f[1] = -y[0] - mu*y[1]*(y[0]*y[0] - 1);
+    return GSL_SUCCESS;
+}
+
 /*
  * t is unused.
  * y[2*ntracers] -- array of (x0, x1) positions of tracer points.
@@ -84,20 +95,33 @@ make_trace_integrator(const gsl_odeiv_step_type *T,
 
     size_t ndim = 2 * params->ntracers;
 
-    integrator_t *integrator = (integrator_t*)malloc(sizeof(integrator));
+    integrator_t *igtr = (integrator_t*)malloc(sizeof(integrator_t));
 
-    /* FIXME: error checking of the above allocations */
+    if(NULL == igtr) {
+        printf("igtr is NULL!!!\n");
+    }
 
-    integrator->s = gsl_odeiv_step_alloc(T, ndim);
-    integrator->c = gsl_odeiv_control_y_new(eps_abs, eps_rel);
-    integrator->e = gsl_odeiv_evolve_alloc(ndim);
+    /* FIXME: better error checking of allocations */
 
-    integrator->sys.function = RHS;
-    integrator->sys.jacobian = NULL;
-    integrator->sys.dimension = ndim;
-    integrator->sys.params = (void*)params;
+    igtr->s = gsl_odeiv_step_alloc(T, ndim);
+    if(NULL == igtr->s) {
+        printf("igtr->s is NULL!!!\n");
+    }
+    igtr->c = gsl_odeiv_control_y_new(eps_abs, eps_rel);
+    if(NULL == igtr->c) {
+        printf("igtr->c is NULL!!!\n");
+    }
+    igtr->e = gsl_odeiv_evolve_alloc(ndim);
+    if(NULL == igtr->e) {
+        printf("igtr->e is NULL!!!\n");
+    }
+
+    igtr->sys.function = RHS;
+    igtr->sys.jacobian = NULL;
+    igtr->sys.dimension = ndim;
+    igtr->sys.params = (void*)params;
     
-    return integrator;
+    return igtr;
 }
 
     void

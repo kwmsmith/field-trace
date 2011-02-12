@@ -5,3 +5,4 @@ waf
 *.so
 test/nosetests
 kaw_analysis
+test/field_trace.py
