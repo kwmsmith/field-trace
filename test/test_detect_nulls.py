@@ -51,7 +51,7 @@ def _test_null_cell():
 
 def test_eig_system():
     N = 256
-    n, m = 2, 3
+    n, m = 20, 30
     test_data = tv.sin_cos_arr(N, n, m)
     psi_11 = vcalc.cderivative(test_data, 'X_DIR', order=2)
     psi_22 = vcalc.cderivative(test_data, 'Y_DIR', order=2)
@@ -73,8 +73,8 @@ def test_eig_system():
     psi_12_interp = Interp2DPeriodic(Xlen, Xlen, psi_12)
 
     for nl in null_locs:
-        set_trace()
         evals, evecs = field_trace.eigsystem(psi_12_interp, psi_22_interp, psi_11_interp, nl[0], nl[1])
+        field_trace.null_is_saddle(evals)
 
     if 0:
         import pylab as pl

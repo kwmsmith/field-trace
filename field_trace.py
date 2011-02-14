@@ -243,3 +243,11 @@ def eigsystem(psi_12, psi_22, psi_11, x1, x2):
              [-psi_11.eval(x1, x2), -psi_12_val         ]])
     evals, evecs = eig(lin_matrix)
     return evals, evecs
+
+def null_is_saddle(evals):
+    if np.any(np.iscomplex(evals)):
+        assert np.allclose(evals[0], evals[1].conjugate())
+        return False
+    if np.all(np.isreal(evals)) and np.allclose(evals[0], -evals[1]):
+        return True
+    raise ValueError("an interesting exception, evals==%s", list(evals))
