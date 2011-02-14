@@ -1,38 +1,47 @@
+from collections import defaultdict
+
 import numpy as np
+
+from kaw_analysis import vcalc
+from wrap_gsl_interp2d import Interp2DPeriodic
+
 from nose.tools import set_trace
 
-from collections import defaultdict
+class Derivator(object):
+
+    def __init__(self, scalar_arr, len1, len2):
+        self.arr = scalar_arr
+        self.len1 = float(len1)
+        self.len2 = float(len2)
+
+        self.deriv1 = vcalc.cderivative(self.arr, 'X_DIR')
+        self.deriv2 = vcalc.cderivative(self.arr, 'Y_DIR')
+
+        self.perp_deriv1 =  self.deriv2
+        self.perp_deriv2 = -self.deriv1
+
+        deriv12 = vcalc.cderivative(self.deriv1, 'Y_DIR')
+        deriv11 = vcalc.cderivative(self.arr, 'X_DIR', order=2)
+        deriv22 = vcalc.cderivative(self.arr, 'Y_DIR', order=2)
+
+        self.deriv12_interp = Interp2DPeriodic(len1, len2, deriv12)
+        self.deriv11_interp = Interp2DPeriodic(len1, len2, deriv11)
+        self.deriv22_interp = Interp2DPeriodic(len1, len2, deriv22)
 
 class NullCell(object):
 
-    def __init__(self, ax, ay, loc, size):
+    def __init__(self, deriv, loc, size):
+        self.deriv = deriv
         if size not in (1,2):
             raise ValueError('argument size must be in (1,2)')
-        assert ax.shape == ay.shape
-        self.ax, self.ay = ax, ay
         self.loc = loc
         self.size = size
-        self.bounds = ax.shape
-        # self.null_loc = self.find_null()
-
-    def covered(self):
-        if self.size == 1:
-            return set((self.loc,))
-        if self.size == 2:
-            offsets = ((0,0), (0,1), (1,0), (1,1))
-            covered = set()
-            i,j = self.loc
-            nx, ny = self.bounds
-            for offset in offsets:
-                oi, oj = offset
-                new_loc = ((oi+i) % nx, (oj+j) % ny)
-                covered.add(new_loc)
-            return covered
+        self.bounds = self.deriv.perp_deriv1.shape
 
     def find_null(self):
         nx,ny = self.bounds
         x,y = self.loc
-        pt1 = self.loc
+        pt1 = x, y
         pt2 = x, (y+self.size) % ny
         pt3 = (x+self.size) % nx, (y+self.size) % ny
         pt4 = (x+self.size) % nx, y
@@ -40,8 +49,8 @@ class NullCell(object):
         zf = []
         for pair in ((pt1, pt2), (pt2, pt3), (pt4, pt3), (pt1, pt4)):
             l0, l1 = pair
-            x0, x1 = self.ax[l0], self.ax[l1]
-            y0, y1 = self.ay[l0], self.ay[l1]
+            x0, x1 = self.deriv.perp_deriv1[l0], self.deriv.perp_deriv1[l1]
+            y0, y1 = self.deriv.perp_deriv2[l0], self.deriv.perp_deriv2[l1]
             zero_x = zero_loc(x0, x1)
             zero_y = zero_loc(y0, y1)
             if 0.0 <= zero_x <= 1.0:
@@ -101,10 +110,10 @@ class NullCell(object):
         # put the solution point in global coordinates.
         return (x + self.size * x_soln, y + self.size * y_soln)
 
-def slope_intercept(x1, y1, x2, y2):
-    slope = (y2 - y1) / (x2 - x1)
-    intcpt = y1 - slope * x1
-    return (slope, intcpt)
+    def is_saddle(self):
+        x0, y0 = self.find_null()
+        evals, evecs = eigsystem(self.deriv, x0, y0)
+        return null_is_saddle(evals)
 
 def zero_loc(y0, y1):
     return -y0 / (y1 - y0)
@@ -119,16 +128,16 @@ def is_null(x1, x2, x3, x4, y1, y2, y3, y4):
     return (flip_lr(x1, x2, x3, x4) and flip_tb(y1, y2, y3, y4) or
         flip_lr(y1, y2, y3, y4) and flip_tb(x1, x2, x3, x4))
 
-def find_and_cull_cells(ax, ay):
-    null_step2 = find_null_cells(ax, ay, step=2)
-    null_step1 = find_null_cells(ax, ay, step=1)
+def find_and_cull_cells(deriv):
+    null_step2 = find_null_cells(deriv, step=2)
+    null_step1 = find_null_cells(deriv, step=1)
     all_nulls = null_step2 + null_step1
     return remove_overlaps(all_nulls)
 
-def find_null_cells(ax, ay, step=1):
+def find_null_cells(deriv, step=1):
     null_cells = []
-    nx, ny = ax.shape
-    assert (nx, ny) == ay.shape
+    nx, ny = deriv.perp_deriv1.shape
+    assert (nx, ny) == deriv.perp_deriv2.shape
     for i in range(nx):
         for j in range(ny):
 
@@ -143,18 +152,18 @@ def find_null_cells(ax, ay, step=1):
             istep = (i+step) % nx
             jstep = (j+step) % ny
 
-            xb1 = ax[i, j]
-            xb2 = ax[i, jstep]
-            xb3 = ax[istep, j]
-            xb4 = ax[istep, jstep]
+            xb1 = deriv.perp_deriv1[i, j]
+            xb2 = deriv.perp_deriv1[i, jstep]
+            xb3 = deriv.perp_deriv1[istep, j]
+            xb4 = deriv.perp_deriv1[istep, jstep]
 
-            yb1 = ay[i, j]
-            yb2 = ay[i, jstep]
-            yb3 = ay[istep, j]
-            yb4 = ay[istep, jstep]
+            yb1 = deriv.perp_deriv2[i, j]
+            yb2 = deriv.perp_deriv2[i, jstep]
+            yb3 = deriv.perp_deriv2[istep, j]
+            yb4 = deriv.perp_deriv2[istep, jstep]
 
             if is_null(xb1, xb2, xb3, xb4, yb1, yb2, yb3, yb4):
-                null_cells.append(NullCell(ax, ay, (i,j), step))
+                null_cells.append(NullCell(deriv, (i,j), step))
 
     return null_cells
 
@@ -203,48 +212,27 @@ def remove_overlaps(cells):
 
     return reduced
 
-def _remove_overlaps(cells):
-    '''
-    given a list of cells, removes cells from the list such that no 2 cells in
-    the returned list overlap.
-
-    2 cells a & b overlap iff len(a.covered().intersection(b.covered())) > 0
-    '''
-
-    covered2cells = defaultdict(list)
-    for cell in cells:
-        for cov in cell.covered:
-            covered2cells[cov].append(cell)
-
-    for cov in covered2cells:
-        cells = covered2cells[cov]
-        # Preference for cells with size == 1, since these are more specific.
-        onesize = [cell for cell in cells if cell.size == 1]
-        assert len(onesize) in (0,1)
-        if onesize:
-            # remove all other cells, keeping just this cell with size == 1.
-            covered2cells[cov] = onesize
-        else:
-            # sort the size-2 cells based on cell.loc and pick the first in the list.
-            sorted_cells = sorted(cells, key=lambda x: x.loc)
-            covered2cells[cov] = sorted_cells[0]
-
-    uniq_cells = set(covered2cells.values())
-    return list(uniq_cells)
-
-def eigsystem(psi_12, psi_22, psi_11, x1, x2):
+def eigsystem(deriv, x1, x2):
     'The psi_NN are interpolator objects to be evaluated at position (x1, x2).'
 
     from numpy.linalg import eig
 
-    psi_12_val = psi_12.eval(x1, x2)
+    psi_12_val = deriv.deriv12_interp.eval(x1, x2)
     lin_matrix = np.array(
-            [[psi_12_val,            psi_22.eval(x1, x2)],
-             [-psi_11.eval(x1, x2), -psi_12_val         ]])
+            [[psi_12_val,            deriv.deriv22_interp.eval(x1, x2)],
+             [-deriv.deriv11_interp.eval(x1, x2), -psi_12_val         ]])
     evals, evecs = eig(lin_matrix)
     return evals, evecs
 
 def null_is_saddle(evals):
+    '''
+    Inspects the given 2 eigenvalues, returns True iff evals are real and add
+    to zero <==> null point is a saddle point.  Returns False otherwise.
+
+    'Circulation' nulls have complex eigenvalues. Eigenvalues are purely
+    imaginary when the circulation null is neither source or sink.
+
+    '''
     if np.any(np.iscomplex(evals)):
         assert np.allclose(evals[0], evals[1].conjugate())
         return False
