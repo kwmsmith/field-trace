@@ -20,6 +20,9 @@ class Derivator(object):
         self.perp_deriv1 =  self.deriv2
         self.perp_deriv2 = -self.deriv1
 
+        self.perp_deriv1_interp = Interp2DPeriodic(len1, len2, self.perp_deriv1)
+        self.perp_deriv2_interp = Interp2DPeriodic(len1, len2, self.perp_deriv2)
+
         deriv12 = vcalc.cderivative(self.deriv1, 'Y_DIR')
         deriv11 = vcalc.cderivative(self.arr, 'X_DIR', order=2)
         deriv22 = vcalc.cderivative(self.arr, 'Y_DIR', order=2)
@@ -27,6 +30,81 @@ class Derivator(object):
         self.deriv12_interp = Interp2DPeriodic(len1, len2, deriv12)
         self.deriv11_interp = Interp2DPeriodic(len1, len2, deriv11)
         self.deriv22_interp = Interp2DPeriodic(len1, len2, deriv22)
+
+def quad_roots(A, B, C):
+    '''solve quadratic equation for A x**2 + B x + C == 0'''
+    from math import sqrt
+    B /= A
+    C /= A
+
+    discr = sqrt(B**2 - 4.0 * C)
+    if B < 0.0:
+        rt = -B + discr
+    elif B > 0.0:
+        rt = -B - discr
+
+    rt /= 2.0
+
+    other_rt = C / rt
+
+    return (rt, other_rt)
+
+def find_null(deriv, i, j):
+
+    a1, b1, c1, d1 = _get_abcd(deriv.perp_deriv1, i, j)
+    a2, b2, c2, d2 = _get_abcd(deriv.perp_deriv2, i, j)
+
+    if 0:
+        # First version:
+
+        C = a1 * c2 - c1 * a2
+        B = (a1 * d2 - d1 * a2) + (b1 * c2 - c1 * b2)
+        A = b1 * d2 - d1 * b2
+
+        rt_x0, rt_x1 = quad_roots(A, B, C)
+
+        if 0.0 <= rt_x0 <= 1.0:
+            rt_x = rt_x0
+        elif 0.0 <= rt_x1 <= 1.0:
+            rt_x = rt_x1
+        else:
+            raise ValueError("no valid x root found")
+
+        rt_y = - (a1 + b1 * rt_x) / (c1 + d1 * rt_x)
+
+        if not (0.0 <= rt_y <= 1.0):
+            rt_y = - (a2 + b2 * rt_x) / (c2 + d2 * rt_x)
+
+            if not (0.0 <= rt_y <= 1.0):
+                raise ValueError("no valid y root found")
+
+        return (rt_x + i, rt_y + j)
+
+    if 1:
+        # Second version:
+        C = a1 * b2 - b1 * a2
+        B = (a1 * d2 - d1 * a2) - (b1 * c2 - c1 * b2)
+        A = c1 * d2 - d1 * c2
+
+        rt_y0, rt_y1 = quad_roots(A, B, C)
+
+        if 0.0 <= rt_y0 <= 1.0:
+            rt_y = rt_y0
+        elif 0.0 <= rt_y1 <= 1.0:
+            rt_y = rt_y1
+        else:
+            raise ValueError("no valid y root found")
+
+        rt_x = - (a1 + c1 * rt_y) / (b1 + d1 * rt_y)
+
+        if not (0.0 <= rt_x <= 1.0):
+            rt_x = - (a2 + c2 * rt_y) / (b2 + d2 * rt_y)
+
+            if not (0.0 <= rt_x <= 1.0):
+                raise ValueError("no valid y root found")
+
+        return (rt_x + i, rt_y + j)
+
 
 class NullCell(object):
 
@@ -37,8 +115,10 @@ class NullCell(object):
         self.loc = loc
         self.size = size
         self.bounds = self.deriv.perp_deriv1.shape
+        self.x0, self.y0 = find_null(self.deriv, *self.loc)
+        self.evals, self.evecs = eigsystem(self.deriv, self.x0, self.y0)
 
-    def find_null(self):
+    def _find_null(self):
         nx,ny = self.bounds
         x,y = self.loc
         pt1 = x, y
@@ -58,6 +138,7 @@ class NullCell(object):
             elif 0.0 <= zero_y <= 1.0:
                 zero_l = zero_y
             else:
+                import pdb; pdb.set_trace()
                 raise RuntimeError("unable to find zero crossing")
             zf.append(zero_l)
 
@@ -111,9 +192,29 @@ class NullCell(object):
         return (x + self.size * x_soln, y + self.size * y_soln)
 
     def is_saddle(self):
-        x0, y0 = self.find_null()
-        evals, evecs = eigsystem(self.deriv, x0, y0)
-        return null_is_saddle(evals)
+        return null_is_saddle(self.evals)
+
+    def incoming_disp(self):
+        if self.evals[0] < 0.0:
+            return self.evecs[:,0]
+        elif self.evals[1] < 0.0:
+            return self.evecs[:,1]
+
+    def outgoing_disp(self):
+        if self.evals[0] > 0.0:
+            return self.evecs[:,0]
+        elif self.evals[1] > 0.0:
+            return self.evecs[:,1]
+
+    def outgoing_start(self, scale):
+        if self.evals[0] > 0.0:
+            evec = self.evecs[:,0]
+        elif self.evals[1] > 0.0:
+            evec = self.evecs[:,1]
+        return ((self.x0 + scale * evec[0],
+                 self.y0 + scale * evec[1]),
+                (self.x0 - scale * evec[0],
+                 self.y0 - scale * evec[1]))
 
 def zero_loc(y0, y1):
     return -y0 / (y1 - y0)
@@ -124,17 +225,84 @@ def flip_lr(p1, p2, p3, p4):
 def flip_tb(p1, p2, p3, p4):
     return p1 * p3 <= 0.0e0 and p2 * p4 <= 0.0e0
 
-def is_null(x1, x2, x3, x4, y1, y2, y3, y4):
+def is_null_flip_test(x1, x2, x3, x4, y1, y2, y3, y4):
     return (flip_lr(x1, x2, x3, x4) and flip_tb(y1, y2, y3, y4) or
         flip_lr(y1, y2, y3, y4) and flip_tb(x1, x2, x3, x4))
 
+def same_sign_or_zero(*args):
+    for arg in args:
+        if arg:
+            test_sgn = -1 if arg < 0 else 1
+    sgns = np.sign(args)
+    return np.all((sgns == test_sgn) | (sgns == 0))
+
+def same_sign(*args):
+    sgns = np.sign(args)
+    return np.all(sgns == sgns[0]) and sgns[0] in (1, -1)
+
+def is_null(xs, ys):
+    if same_sign(*xs) or same_sign(*ys):
+        return False
+    return True
+
 def find_and_cull_cells(deriv):
-    null_step2 = find_null_cells(deriv, step=2)
+    # null_step2 = find_null_cells(deriv, step=2)
     null_step1 = find_null_cells(deriv, step=1)
-    all_nulls = null_step2 + null_step1
-    return remove_overlaps(all_nulls)
+    return null_step1
+    # all_nulls = null_step2 + null_step1
+    # return remove_overlaps(all_nulls)
+
+def _get_corner_vals(f, i, j):
+
+    # #  y --------->
+    # #  
+    # #  f00 ---- f01  x
+    # #  |         |   |
+    # #  |         |   |
+    # #  f10 ---- f11  V
+
+    nx, ny = f.shape
+    step = 1
+    istep = (i+step) % nx
+    jstep = (j+step) % ny
+
+    x00 = f[i, j]
+    x01 = f[i, jstep]
+    x10 = f[istep, j]
+    x11 = f[istep, jstep]
+
+    return (x00, x01, x10, x11)
+
+def _get_abcd(f, i, j):
+    f00, f01, f10, f11 = _get_corner_vals(f, i, j)
+
+    a = f00
+    b = f10 - f00
+    c = f01 - f00
+    d = f11 - f10 - f01 + f00
+
+    return (a, b, c, d)
 
 def find_null_cells(deriv, step=1):
+    step = 1
+    null_cells = []
+    nx, ny = deriv.perp_deriv1.shape
+    assert (nx, ny) == deriv.perp_deriv2.shape
+    for i in range(nx):
+        for j in range(ny):
+            if is_null(_get_corner_vals(deriv.perp_deriv1, i, j),
+                       _get_corner_vals(deriv.perp_deriv2, i, j)):
+                try:
+                    find_null(deriv, i, j)
+                except ValueError:
+                    pass
+                else:
+                    null_cells.append(NullCell(deriv, (i,j), step))
+
+    return null_cells
+
+'''
+def _find_null_cells(deriv, step=1):
     null_cells = []
     nx, ny = deriv.perp_deriv1.shape
     assert (nx, ny) == deriv.perp_deriv2.shape
@@ -166,6 +334,7 @@ def find_null_cells(deriv, step=1):
                 null_cells.append(NullCell(deriv, (i,j), step))
 
     return null_cells
+'''
 
 def remove_overlaps(cells):
     nx, ny = cells[0].bounds
@@ -203,7 +372,9 @@ def remove_overlaps(cells):
 
     for idx, cluster in enumerate(clusters[:]):
         onesize = [cell for cell in cluster if cell.size == 1]
-        assert len(onesize) in (0,1)
+        if len(onesize) not in (0,1):
+            # FIXME: this should be an error... why??
+            import pdb; pdb.set_trace()
         if onesize:
             reduced.extend(onesize)
         else:
@@ -239,3 +410,163 @@ def null_is_saddle(evals):
     if np.all(np.isreal(evals)) and np.allclose(evals[0], -evals[1]):
         return True
     raise ValueError("an interesting exception, evals==%s", list(evals))
+
+def make_skeleton(arr, deriv, saddles, ncomb, start_offset, hit_radius, timeout=500):
+    from wrap_trace_integrator import TraceIntegrator
+
+    scale = 1. / max(deriv.deriv1.max(), deriv.deriv2.max())
+
+    ti = TraceIntegrator(ntracers=ncomb, scale=scale,
+            x0max=deriv.len1, x1max=deriv.len2,
+            v0=deriv.perp_deriv1_interp, v1=deriv.perp_deriv2_interp,
+            eps_abs=1.0e-6, eps_rel=0.0)
+
+    def within_hit_rad(comb_positions, saddle_positions):
+        comb_center = comb_positions.sum(axis=0) / comb_positions.shape[0]
+        comb_radius2 = np.max(np.sum((comb_positions - comb_center)**2, axis=1))
+        distances2 = np.sum((saddle_positions - comb_center)**2, axis=1)
+        if np.any(distances2 <= comb_radius2):
+            return saddle_positions[distances2 <= comb_radius2]
+        else:
+            return []
+        
+    comb_positions = get_comb(saddles[0], ncomb, start_offset, hit_radius)
+
+    saddle_positions = np.array(
+                            [[s.x0, s.y0] for s in saddles if s is not saddles[0]])
+
+    dt = 1. / 2**3
+
+    trace = []
+
+    t_init = 0.0
+    ctr = 0
+    while True:
+        ctr += 1
+        trace.append(list(comb_positions.flatten()))
+        ti.evolve(t=t_init, t1=t_init+dt, h=1.0e-6, y=comb_positions.ravel())
+        t_init += dt
+        clip_positions(comb_positions, deriv.len1, deriv.len2)
+        if t_init >= timeout:
+            return (False, trace)
+        hits = within_hit_rad(comb_positions, saddle_positions)
+        if np.any(hits):
+            return (True, trace)
+
+def trace_from_saddle(arr, deriv, start_saddle, start_offset, outgoing=True, timeout=500):
+    from wrap_trace_integrator import TraceIntegrator
+
+    scale = 10. / max(deriv.deriv1.max(), deriv.deriv2.max())
+    if not outgoing:
+        scale *= -1
+
+    ti = TraceIntegrator(ntracers=1, scale=scale,
+            x0max=deriv.len1, x1max=deriv.len2,
+            v0=deriv.perp_deriv1_interp, v1=deriv.perp_deriv2_interp,
+            eps_abs=1.0e-6, eps_rel=0.0)
+
+    offset = np.array((start_saddle.x0, start_saddle.y0))
+    if outgoing:
+        evec = start_saddle.outgoing_disp()
+    else:
+        evec = start_saddle.incoming_disp()
+    position = np.array([offset + start_offset * evec])
+
+    dt = 1. / 2**1
+
+    trace = []
+
+    t_init = 0.0
+
+    while True:
+        trace.append(list(position.flatten()))
+        ti.evolve(t=t_init, t1=t_init+dt, h=1.0e-6, y=position.ravel())
+        t_init += dt
+        clip_positions(position, deriv.len1, deriv.len2)
+        if t_init >= timeout:
+            return trace
+
+def get_comb(nullcell, npts, start_offset, scale):
+    offset = np.array((nullcell.x0, nullcell.y0))
+    evec = nullcell.outgoing_disp()
+    perp_evec = np.array([-evec[1], evec[0]])
+    comb = np.array([(offset + start_offset * evec + ss * perp_evec) for ss in np.linspace(-scale, scale, npts, endpoint=True)])
+    return comb
+
+def clip_positions(posns, x0max, x1max):
+    from wrap_trace_integrator import clip
+    for pos in posns:
+        pos[0] = clip(pos[0], x0max)
+        pos[1] = clip(pos[1], x1max)
+
+def neighbors(i, j, nx, ny):
+    return (
+            ((i-1)%nx, (j-1)%ny),
+            ((i+1)%nx, (j-1)%ny),
+            ((i+1)%nx, (j+1)%ny),
+            ((i-1)%nx, (j+1)%ny),
+
+            ((i-1)%nx, j),
+            (i, (j-1)%ny),
+            ((i+1)%nx, j),
+            (i, (j+1)%ny)
+            )
+
+def level_sets(arr, interp, nulls):
+    null2marked = {}
+    for idx, null in enumerate(nulls):
+        level_val = interp.eval(null.x0, null.y0)
+        null2marked[null] = level_set(arr, level_val, (null.x0, null.y0))
+    return null2marked
+
+def marked_to_mask(shape, marked):
+    mask = np.zeros(shape, dtype=np.bool_)
+    for m in marked:
+        for (i,j) in m:
+            mask[i,j] = True
+    return mask
+
+def level_set(arr, level_val, position):
+    from collections import deque
+    nx, ny = arr.shape
+    larr = arr - level_val # leveled array
+    i0, j0 = int(position[0]) % nx, int(position[1]) % ny
+    cvs = _get_corner_vals(larr, i0, j0)
+    # FIXME: this should be the case, is it an interpolation issue?
+    # if same_sign_or_zero(*cvs):
+        # import pdb; pdb.set_trace()
+    marked = set([(i0, j0)])
+    front = deque([(i0, j0)])
+    while front:
+        i0, j0 = front.pop()
+        for (i, j) in neighbors(i0, j0, nx, ny):
+            if (i,j) in marked:
+                continue
+            cvs = _get_corner_vals(larr, i, j)
+            if not same_sign_or_zero(*cvs):
+                marked.add((i, j))
+                front.appendleft((i, j))
+
+    return list(marked)
+
+def flood_fill(arr, i, j, border_color, fill_color):
+    def neighbors(i, j, nx, ny):
+        return (((i+1)%nx, j),
+                (i, (j+1)%ny),
+                ((i-1)%nx, j),
+                (i, (j-1)%ny))
+
+    nx, ny = arr.shape
+    i %= nx; j %= ny
+    if arr[i, j] == border_color:
+        return
+    edge = [(i,j)]
+    arr[i,j] = fill_color
+    while edge:
+        newedge = []
+        for (i, j) in edge:
+            for (s, t) in neighbors(i, j, nx, ny):
+                if arr[s,t] not in (border_color, fill_color):
+                    arr[s,t] = fill_color
+                    newedge.append((s,t))
+        edge = newedge

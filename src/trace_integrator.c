@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-    static double
+    double
 clip_coord(double x, const double xmax)
 {
     while(x < 0.0) {

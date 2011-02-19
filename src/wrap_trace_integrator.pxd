@@ -38,6 +38,7 @@ cdef extern from "trace_integrator.h":
 
     int trace_integrator_evolve(integrator_t *i, double *t, double t1, double *h, double *y)
 
+    double clip_coord(double x, double xmax)
 
 from wrap_gsl_interp2d cimport Interp2DPeriodic
 cimport numpy as np

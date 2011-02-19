@@ -8,28 +8,38 @@ from nose.tools import ok_, eq_, set_trace
 
 import field_trace
 
-def test_find_null_2x2():
+global_N = 64
+
+def _test_find_null_2x2():
+
     class _dummy(object): pass
     dd = _dummy()
-    dd.perp_deriv1 = np.array([[-2.,-2.],[1.,1.]])
-    dd.perp_deriv2 = np.array([[-1., 2.],[-1., 2]])
-    nulls = field_trace.find_null_cells(dd, step=1)
-    ok_(np.allclose(nulls[0].find_null(), (2./3, 1./3)))
 
-    dd.perp_deriv1 = np.array([[-1.,-1.],[1.,1.]])
-    dd.perp_deriv2 = np.array([[-1., 1.],[-1., 1.]])
-    nulls = field_trace.find_null_cells(dd, step=1)
-    ok_(np.allclose(nulls[0].find_null(), (1./2, 1./2)))
+    oeigsystem = field_trace.eigsystem
+    try:
+        field_trace.eigsystem = lambda x,y,z: (None, None)
+
+        dd.perp_deriv1 = np.array([[-2.,-2.],[1.,1.]])
+        dd.perp_deriv2 = np.array([[-1., 2.],[-1., 2]])
+        null = field_trace.find_null_cells(dd, step=1)[0]
+        ok_(np.allclose((null.x0, null.y0), (2./3, 1./3)))
+
+        dd.perp_deriv1 = np.array([[-1.,-1.],[1.,1.]])
+        dd.perp_deriv2 = np.array([[-1., 1.],[-1., 1.]])
+        null = field_trace.find_null_cells(dd, step=1)[0]
+        ok_(np.allclose((null.x0, null.y0), (1./2, 1./2)))
+    finally:
+        field_trace.eigsystem = oeigsystem
 
 def test_find_nulls():
     def tester(n, m):
-        N = 256
+        N = global_N
         test_data = tv.sin_cos_arr(N, n, m)
         dd = field_trace.Derivator(test_data, N, N)
         nulls = field_trace.find_and_cull_cells(dd)
         eq_(4*n*m, len(nulls))
         cell_locs = [n.loc for n in nulls]
-        null_locs = [n.find_null() for n in nulls]
+        null_locs = [(n.x0, n.y0) for n in nulls]
 
         if 0:
             X, Y = zip(*null_locs)
@@ -42,9 +52,11 @@ def test_find_nulls():
             raw_input("enter to continue")
             pl.close('all')
 
-    for n in range(3, 5):
-        for m in range(10, 12):
-            yield tester, n, m
+    # for n in range(3, 5):
+        # for m in range(10, 12):
+            # yield tester, n, m
+
+    yield tester, 2, 2
 
 def _test_null_cell():
     nc = field_trace.NullCell((10, 11), 2, (512, 512))
@@ -55,14 +67,14 @@ def _test_null_cell():
     eq_(nc.covered(), set([(10,0),(0,10),(10,10),(0,0)]))
 
 def test_eig_system():
-    N = 256
+    N = global_N
     n, m = 3, 4
     test_data = tv.sin_cos_arr(N, n, m)
 
     dd = field_trace.Derivator(test_data, N, N)
 
     nulls = field_trace.find_and_cull_cells(dd)
-    null_locs = [n.find_null() for n in nulls]
+    null_locs = [(n.x0, n.y0) for n in nulls]
 
     for nl in null_locs:
         evals, evecs = field_trace.eigsystem(dd, nl[0], nl[1])
@@ -86,7 +98,7 @@ def test_eig_system():
         raw_input("enter to continue")
 
 def test_derivator():
-    N = 256
+    N = global_N
     n, m = 10, 3
     test_data = tv.sin_cos_arr(N, n, m)
     dd = field_trace.Derivator(test_data, N, N)
@@ -123,3 +135,150 @@ def test_derivator():
     compare_interps(dd.deriv12_interp, psi_12_interp, [rand_Xs, rand_Ys])
     compare_interps(dd.deriv11_interp, psi_11_interp, [rand_Xs, rand_Ys])
     compare_interps(dd.deriv22_interp, psi_22_interp, [rand_Xs, rand_Ys])
+
+def test_offset():
+    N = global_N
+    n, m = 2, 4
+
+    test_data = tv.sin_cos_arr(N, n, m)
+    dd = field_trace.Derivator(test_data, N, N)
+
+    nulls = field_trace.find_and_cull_cells(dd)
+    saddles = [null for null in nulls if null.is_saddle()]
+
+    saddle = saddles[0]
+
+    start1, start2 = saddle.outgoing_start(scale=1.0e-5)
+
+def _test_tracer():
+    N = global_N
+    n, m = 10, 15
+
+    test_data = tv.sin_cos_arr(N, n, m)
+
+    dd = field_trace.Derivator(test_data, N, N)
+
+    nulls = field_trace.find_and_cull_cells(dd)
+    saddles = [null for null in nulls if null.is_saddle()]
+
+    saddle0s = [(s.x0, s.y0) for s in saddles]
+
+    finished, trace = field_trace.make_skeleton(
+            arr=test_data, deriv=dd, saddles=saddles, ncomb=5, start_offset=0.e-2, hit_radius=1.e-3)
+
+    if 0:
+        import pylab as pl
+        pl.ion()
+        pl.imshow(test_data)
+        X, Y = zip(*saddle0s)
+        pl.scatter(Y, X, c='k')
+        tr = np.array(trace)
+        for i in range(0, len(tr[0]), 2):
+            X,Y = tr[:,i], tr[:,i+1]
+            pl.scatter(Y, X, c='r')
+        raw_input("enter to continue")
+
+def test_level_set():
+    N = 64
+    n, m = 1, 4
+    test_data = tv.sin_cos_arr(N, n, m)
+
+    dd = field_trace.Derivator(test_data, N, N)
+    nulls = field_trace.find_and_cull_cells(dd)
+    saddles = [null for null in nulls if null.is_saddle()]
+    peaks = [null for null in nulls if not null.is_saddle()]
+    saddle0s = [(s.x0, s.y0) for s in saddles]
+    peak0s = [(p.x0, p.y0) for p in peaks]
+
+    x0, y0 = saddle0s[0]
+
+    psi_interp = Interp2DPeriodic(N, N, test_data)
+    level_val = psi_interp.eval(x0, y0)
+
+    level_sets = field_trace.level_sets(test_data, psi_interp, nulls)
+
+    mask = field_trace.marked_to_mask(test_data.shape, level_sets.values())
+
+    masked_data = test_data.copy()
+    masked_data[mask] = test_data.max()
+
+    if 0:
+        import pylab as pl
+        pl.ion()
+        pl.imshow(masked_data, cmap='hot')
+        # # Plot the grid points
+        # if 0:
+            # X = np.linspace(0, dta.shape[0]-1, dta.shape[0])
+            # for i in range(dta.shape[0]):
+                # Y = np.zeros(dta.shape[1])
+                # Y.fill(i)
+                # pl.scatter(Y, X, c='m')
+        X, Y = zip(*saddle0s)
+        pl.scatter(Y, X, c='k')
+        X, Y = zip(*peak0s)
+        pl.scatter(Y, X, c='b')
+        raw_input("enter to continue")
+
+class test_flood_fill(object):
+
+    def setup(self):
+        self.PLOT = False
+        self.border_color = 1
+        self.fill_color = 2
+        self.square_hole = np.zeros((10, 10), dtype=np.int8)
+        self.square_hole[3:8,3:8] = self.border_color
+        self.square_hole[4:7,4:7] = 0
+
+    def test_square_hole(self):
+        oarr = self.square_hole.copy()
+        field_trace.flood_fill(self.square_hole, 0, 0, border_color=self.border_color, fill_color=self.fill_color)
+
+        if self.PLOT:
+            import pylab as pl
+            pl.ion()
+            pl.close('all')
+            pl.imshow(oarr, interpolation='nearest')
+            pl.figure()
+            pl.imshow(self.square_hole, interpolation='nearest')
+            raw_input("enter to continue")
+
+    def test_square_hole_interior(self):
+        oarr = self.square_hole.copy()
+        field_trace.flood_fill(self.square_hole, 4, 4, border_color=self.border_color, fill_color=self.fill_color)
+
+        if self.PLOT:
+            import pylab as pl
+            pl.ion()
+            pl.close('all')
+            pl.imshow(oarr, interpolation='nearest')
+            pl.figure()
+            pl.imshow(self.square_hole, interpolation='nearest')
+            raw_input("enter to continue")
+
+    def test_square_hole_shifted(self):
+        self.square_hole = np.roll(self.square_hole, shift=4, axis=1)
+        oarr = self.square_hole.copy()
+        field_trace.flood_fill(self.square_hole, 4, 4, border_color=self.border_color, fill_color=self.fill_color)
+
+        if self.PLOT:
+            import pylab as pl
+            pl.ion()
+            pl.close('all')
+            pl.imshow(oarr, interpolation='nearest')
+            pl.figure()
+            pl.imshow(self.square_hole, interpolation='nearest')
+            raw_input("enter to continue")
+
+    def test_square_hole_shifted_interior(self):
+        self.square_hole = np.roll(self.square_hole, shift=4, axis=1)
+        oarr = self.square_hole.copy()
+        field_trace.flood_fill(self.square_hole, 4, 0, border_color=self.border_color, fill_color=self.fill_color)
+
+        if self.PLOT:
+            import pylab as pl
+            pl.ion()
+            pl.close('all')
+            pl.imshow(oarr, interpolation='nearest')
+            pl.figure()
+            pl.imshow(self.square_hole, interpolation='nearest')
+            raw_input("enter to continue")

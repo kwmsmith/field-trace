@@ -39,4 +39,6 @@ void trace_integrator_free(integrator_t *i);
 
 int trace_integrator_evolve(integrator_t *i, double *t, double t1, double *h, double y[]);
 
+double clip_coord(double x, const double xmax);
+
 #endif

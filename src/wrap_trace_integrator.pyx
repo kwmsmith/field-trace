@@ -41,3 +41,6 @@ cdef class TraceIntegrator:
 
         if self.integrator:
             trace_integrator_free(self.integrator)
+
+def clip(double x, double xmax):
+    return clip_coord(x, xmax)
