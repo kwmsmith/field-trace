@@ -8,6 +8,8 @@ from nose.tools import ok_, eq_, set_trace
 
 import field_trace
 
+from scipy import ndimage
+
 global_N = 64
 
 def _test_find_null_2x2():
@@ -21,12 +23,12 @@ def _test_find_null_2x2():
 
         dd.perp_deriv1 = np.array([[-2.,-2.],[1.,1.]])
         dd.perp_deriv2 = np.array([[-1., 2.],[-1., 2]])
-        null = field_trace.find_null_cells(dd, step=1)[0]
+        null = field_trace.find_null_cells(dd)[0]
         ok_(np.allclose((null.x0, null.y0), (2./3, 1./3)))
 
         dd.perp_deriv1 = np.array([[-1.,-1.],[1.,1.]])
         dd.perp_deriv2 = np.array([[-1., 1.],[-1., 1.]])
-        null = field_trace.find_null_cells(dd, step=1)[0]
+        null = field_trace.find_null_cells(dd)[0]
         ok_(np.allclose((null.x0, null.y0), (1./2, 1./2)))
     finally:
         field_trace.eigsystem = oeigsystem
@@ -36,7 +38,7 @@ def test_find_nulls():
         N = global_N
         test_data = tv.sin_cos_arr(N, n, m)
         dd = field_trace.Derivator(test_data, N, N)
-        nulls = field_trace.find_and_cull_cells(dd)
+        nulls = field_trace.find_null_cells(dd)
         eq_(4*n*m, len(nulls))
         cell_locs = [n.loc for n in nulls]
         null_locs = [(n.x0, n.y0) for n in nulls]
@@ -66,14 +68,14 @@ def _test_null_cell():
     nc = field_trace.NullCell((10, 10), 2, (11,11))
     eq_(nc.covered(), set([(10,0),(0,10),(10,10),(0,0)]))
 
-def test_eig_system():
+def _test_eig_system():
     N = global_N
     n, m = 3, 4
     test_data = tv.sin_cos_arr(N, n, m)
 
     dd = field_trace.Derivator(test_data, N, N)
 
-    nulls = field_trace.find_and_cull_cells(dd)
+    nulls = field_trace.find_null_cells(dd)
     null_locs = [(n.x0, n.y0) for n in nulls]
 
     for nl in null_locs:
@@ -136,14 +138,14 @@ def test_derivator():
     compare_interps(dd.deriv11_interp, psi_11_interp, [rand_Xs, rand_Ys])
     compare_interps(dd.deriv22_interp, psi_22_interp, [rand_Xs, rand_Ys])
 
-def test_offset():
+def _test_offset():
     N = global_N
     n, m = 2, 4
 
     test_data = tv.sin_cos_arr(N, n, m)
     dd = field_trace.Derivator(test_data, N, N)
 
-    nulls = field_trace.find_and_cull_cells(dd)
+    nulls = field_trace.find_null_cells(dd)
     saddles = [null for null in nulls if null.is_saddle()]
 
     saddle = saddles[0]
@@ -158,7 +160,7 @@ def _test_tracer():
 
     dd = field_trace.Derivator(test_data, N, N)
 
-    nulls = field_trace.find_and_cull_cells(dd)
+    nulls = field_trace.find_null_cells(dd)
     saddles = [null for null in nulls if null.is_saddle()]
 
     saddle0s = [(s.x0, s.y0) for s in saddles]
@@ -184,7 +186,7 @@ def test_level_set():
     test_data = tv.sin_cos_arr(N, n, m)
 
     dd = field_trace.Derivator(test_data, N, N)
-    nulls = field_trace.find_and_cull_cells(dd)
+    nulls = field_trace.find_null_cells(dd)
     saddles = [null for null in nulls if null.is_saddle()]
     peaks = [null for null in nulls if not null.is_saddle()]
     saddle0s = [(s.x0, s.y0) for s in saddles]
@@ -205,7 +207,7 @@ def test_level_set():
     if 0:
         import pylab as pl
         pl.ion()
-        pl.imshow(masked_data, cmap='hot')
+        pl.imshow(masked_data, cmap='hot', interpolation='nearest')
         # # Plot the grid points
         # if 0:
             # X = np.linspace(0, dta.shape[0]-1, dta.shape[0])
@@ -219,66 +221,111 @@ def test_level_set():
         pl.scatter(Y, X, c='b')
         raw_input("enter to continue")
 
-class test_flood_fill(object):
+def test_partition_regions():
+    boundary = [(i, 3) for i in range(10)] + [(i, 7) for i in range(10)]
+    nx, ny = 10, 10
+    regions = field_trace.partition_regions(nx, ny, boundary)
+    eq_(len(regions), 2)
+
+    arr = np.zeros((nx, ny), dtype=np.int_)
+    field_trace.set_region(arr, boundary, 0)
+    field_trace.set_region(arr, regions[0], 1)
+    field_trace.set_region(arr, regions[1], 2)
+
+    for row in arr:
+        ok_(np.allclose(row, [1, 1, 1, 0, 2, 2, 2, 0, 1, 1]), `row`)
+
+    if 0:
+        import pylab as pl
+        pl.ion()
+        pl.imshow(arr, cmap='hot', interpolation='nearest')
+        raw_input("enter to continue")
+
+
+def test_neighbors4():
+    eq_(field_trace.neighbors4(0, 0, 10, 10), ((1, 0), (0, 1), (9, 0), (0, 9)))
+
+class test_cc_label(object):
 
     def setup(self):
         self.PLOT = False
-        self.border_color = 1
-        self.fill_color = 2
-        self.square_hole = np.zeros((10, 10), dtype=np.int8)
-        self.square_hole[3:8,3:8] = self.border_color
-        self.square_hole[4:7,4:7] = 0
+        self.background = 0
+        self.empty = 1
+        self.square_hole = np.zeros((10, 10), dtype=np.int32)
+        self.square_hole.fill(self.empty)
+        self.square_hole[3:8,3:8] = self.background
+        self.square_hole[4:7,4:7] = self.empty
 
-    def test_square_hole(self):
-        oarr = self.square_hole.copy()
-        field_trace.flood_fill(self.square_hole, 0, 0, border_color=self.border_color, fill_color=self.fill_color)
+    def test_cc_label(self):
+        larr = field_trace.connected_component_label(self.square_hole)
 
-        if self.PLOT:
+        ok_(np.all(larr == \
+                 np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 0, 0, 0, 0, 0, 1, 1],
+                           [1, 1, 1, 0, 2, 2, 2, 0, 1, 1],
+                           [1, 1, 1, 0, 2, 2, 2, 0, 1, 1],
+                           [1, 1, 1, 0, 2, 2, 2, 0, 1, 1],
+                           [1, 1, 1, 0, 0, 0, 0, 0, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], dtype=np.int32)))
+
+        if 0:
             import pylab as pl
             pl.ion()
-            pl.close('all')
-            pl.imshow(oarr, interpolation='nearest')
-            pl.figure()
-            pl.imshow(self.square_hole, interpolation='nearest')
-            raw_input("enter to continue")
-
-    def test_square_hole_interior(self):
-        oarr = self.square_hole.copy()
-        field_trace.flood_fill(self.square_hole, 4, 4, border_color=self.border_color, fill_color=self.fill_color)
-
-        if self.PLOT:
-            import pylab as pl
-            pl.ion()
-            pl.close('all')
-            pl.imshow(oarr, interpolation='nearest')
-            pl.figure()
-            pl.imshow(self.square_hole, interpolation='nearest')
+            pl.imshow(larr, cmap='hot', interpolation='nearest')
             raw_input("enter to continue")
 
     def test_square_hole_shifted(self):
         self.square_hole = np.roll(self.square_hole, shift=4, axis=1)
-        oarr = self.square_hole.copy()
-        field_trace.flood_fill(self.square_hole, 4, 4, border_color=self.border_color, fill_color=self.fill_color)
+        larr = field_trace.connected_component_label(self.square_hole)
 
-        if self.PLOT:
+        ok_(np.all(larr == \
+                 np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [0, 0, 1, 1, 1, 1, 1, 0, 0, 0],
+                           [2, 0, 1, 1, 1, 1, 1, 0, 2, 2],
+                           [2, 0, 1, 1, 1, 1, 1, 0, 2, 2],
+                           [2, 0, 1, 1, 1, 1, 1, 0, 2, 2],
+                           [0, 0, 1, 1, 1, 1, 1, 0, 0, 0],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], dtype=np.int32)))
+
+        if 0:
             import pylab as pl
             pl.ion()
             pl.close('all')
-            pl.imshow(oarr, interpolation='nearest')
-            pl.figure()
             pl.imshow(self.square_hole, interpolation='nearest')
+            pl.figure()
+            pl.imshow(larr, interpolation='nearest')
             raw_input("enter to continue")
 
-    def test_square_hole_shifted_interior(self):
-        self.square_hole = np.roll(self.square_hole, shift=4, axis=1)
-        oarr = self.square_hole.copy()
-        field_trace.flood_fill(self.square_hole, 4, 0, border_color=self.border_color, fill_color=self.fill_color)
+    def test_square_hole_shifted_up(self):
+        self.square_hole = np.roll(self.square_hole, shift=4, axis=0)
+        outarr = self.square_hole.copy()
+        larr = field_trace.connected_component_label(self.square_hole, output=outarr)
 
-        if self.PLOT:
+        eq_(id(outarr), id(larr))
+
+        ok_(np.all(larr == \
+                 np.array([[1, 1, 1, 0, 2, 2, 2, 0, 1, 1],
+                           [1, 1, 1, 0, 0, 0, 0, 0, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 0, 0, 0, 0, 0, 1, 1],
+                           [1, 1, 1, 0, 2, 2, 2, 0, 1, 1],
+                           [1, 1, 1, 0, 2, 2, 2, 0, 1, 1]], dtype=np.int32)))
+
+        if 0:
             import pylab as pl
             pl.ion()
             pl.close('all')
-            pl.imshow(oarr, interpolation='nearest')
-            pl.figure()
             pl.imshow(self.square_hole, interpolation='nearest')
+            pl.figure()
+            pl.imshow(larr, interpolation='nearest')
             raw_input("enter to continue")

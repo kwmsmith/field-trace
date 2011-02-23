@@ -41,7 +41,7 @@ def test_tracer():
 
     dd = field_trace.Derivator(dta, dta.shape[0], dta.shape[1])
 
-    nulls = field_trace.find_and_cull_cells(dd)
+    nulls = field_trace.find_null_cells(dd)
     saddles = [null for null in nulls if null.is_saddle()]
     peaks = [null for null in nulls if not null.is_saddle()]
 
@@ -100,42 +100,54 @@ def test_level_set():
     test_data = psi_arrs[-1].astype(np.double)
     N = test_data.shape[0]
 
+    print "locating nulls"
     dd = field_trace.Derivator(test_data, N, N)
-    nulls = field_trace.find_and_cull_cells(dd)
-    saddles = [null for null in nulls if null.is_saddle()]
-    peaks = [null for null in nulls if not null.is_saddle()]
-    saddle0s = [(s.x0, s.y0) for s in saddles]
-    peak0s = [(p.x0, p.y0) for p in peaks]
-
-    x0, y0 = saddle0s[0]
+    nulls = field_trace.find_null_cells(dd)
+    null0s = [(n.x0, n.y0) for n in nulls]
 
     psi_interp = Interp2DPeriodic(N, N, test_data)
-    level_val = psi_interp.eval(x0, y0)
 
     print "computing level sets"
-    null2level = field_trace.level_sets(test_data, psi_interp, saddles[:50])
+    levels = [null.levelset for null in nulls]
 
-    if 1:
+    print "classifying nulls"
+
+    peaks = []
+    saddles = []
+    for null in nulls:
+        if null.is_saddle():
+            saddles.append(null)
+        else:
+            peaks.append(null)
+
+    peak0s = [(p.x0, p.y0) for p in peaks]
+    saddle0s = [(s.x0, s.y0) for s in saddles]
+
+    print "plotting"
+        
+    if 0:
         import pylab as pl
         pl.ion()
-        all_masks = field_trace.marked_to_mask(test_data.shape, null2level.values())
+        all_masks = field_trace.marked_to_mask(test_data.shape, levels)
         masked_data = test_data.copy()
         masked_data[all_masks] = test_data.max()
         pl.imshow(masked_data, cmap='hot', interpolation='nearest')
-        X, Y = zip(*saddle0s)
-        pl.scatter(Y, X, c='k')
         X, Y = zip(*peak0s)
+        pl.scatter(Y, X, c='k')
+        X, Y = zip(*saddle0s)
         pl.scatter(Y, X, c='b')
+
+        if 0:
+            for level in levels:
+                masked_data = test_data.copy()
+                mask = field_trace.marked_to_mask(test_data.shape, [level])
+                masked_data[mask] = test_data.max()
+                pl.imshow(masked_data, cmap='hot', interpolation='nearest')
+                X, Y = zip(*null0s)
+                pl.scatter(Y, X, c='k')
+                X, Y = zip(*null0s)
+                pl.scatter(Y, X, c='b')
+
         raw_input("enter to continue")
-        # for level in null2level.values():
-            # masked_data = test_data.copy()
-            # mask = field_trace.marked_to_mask(test_data.shape, [level])
-            # masked_data[mask] = test_data.max()
-            # pl.imshow(masked_data, cmap='hot', interpolation='nearest')
-            # X, Y = zip(*saddle0s)
-            # pl.scatter(Y, X, c='k')
-            # X, Y = zip(*peak0s)
-            # pl.scatter(Y, X, c='b')
-            # raw_input("enter to continue")
 
 test_level_set()

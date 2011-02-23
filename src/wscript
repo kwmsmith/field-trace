@@ -48,6 +48,13 @@ def build(bld):
 
     bld(
         features = 'c cshlib pyext',
+        source   = '_field_trace.pyx',
+        target   = '_field_trace',
+        use      = "NUMPY",
+        )
+
+    bld(
+        features = 'c cshlib pyext',
         source = 'trace_integrator.c wrap_trace_integrator.pyx',
         target = 'wrap_trace_integrator',
         use = "NUMPY gsl_interp2d",
