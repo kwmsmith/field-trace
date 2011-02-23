@@ -67,7 +67,10 @@ def _ver0(a1, b1, c1, d1, a2, b2, c2, d2, i, j):
     else:
         raise ValueError("no valid x root found")
 
-    rt_y = - (a1 + b1 * rt_x) / (c1 + d1 * rt_x)
+    try:
+        rt_y = - (a1 + b1 * rt_x) / (c1 + d1 * rt_x)
+    except ZeroDivisionError:
+        rt_y = -1.0
 
     if not (0.0 <= rt_y <= 1.0):
         rt_y = - (a2 + b2 * rt_x) / (c2 + d2 * rt_x)
@@ -91,7 +94,10 @@ def _ver1(a1, b1, c1, d1, a2, b2, c2, d2, i, j):
     else:
         raise ValueError("no valid y root found")
 
-    rt_x = - (a1 + c1 * rt_y) / (b1 + d1 * rt_y)
+    try:
+        rt_x = - (a1 + c1 * rt_y) / (b1 + d1 * rt_y)
+    except ZeroDivisionError:
+        rt_x = -1.0
 
     if not (0.0 <= rt_x <= 1.0):
         rt_x = - (a2 + c2 * rt_y) / (b2 + d2 * rt_y)
@@ -106,7 +112,10 @@ def find_cell_zero(deriv, i, j):
     a1, b1, c1, d1 = _get_abcd(deriv.perp_deriv1, i, j)
     a2, b2, c2, d2 = _get_abcd(deriv.perp_deriv2, i, j)
 
-    return _ver1(a1, b1, c1, d1, a2, b2, c2, d2, i, j)
+    try:
+        return _ver1(a1, b1, c1, d1, a2, b2, c2, d2, i, j)
+    except ZeroDivisionError:
+        return _ver0(a1, b1, c1, d1, a2, b2, c2, d2, i, j)
 
 def is_null(xs, ys):
     if _field_trace.same_sign(*xs) or _field_trace.same_sign(*ys):
@@ -164,16 +173,11 @@ def find_null_cells(deriv):
             if is_null(_get_corner_vals(deriv.perp_deriv1, i, j),
                        _get_corner_vals(deriv.perp_deriv2, i, j)):
                 try:
-                    find_cell_zero(deriv, i, j)
+                    null_cells.append(NullCell(deriv, (i,j)))
                 except ValueError:
                     pass
-                else:
-                    null_cells.append(NullCell(deriv, (i,j)))
 
     return null_cells
-
-def level_sets(arr, interp, nulls):
-    return dict((null, null.levelset) for null in nulls)
 
 def marked_to_mask(shape, marked):
     mask = np.zeros(shape, dtype=np.bool_)
@@ -187,9 +191,6 @@ def _level_set(arr, level_val, position):
     larr = arr - level_val # leveled array
     i0, j0 = int(position[0]) % nx, int(position[1]) % ny
     cvs = _get_corner_vals(larr, i0, j0)
-    # FIXME: this should be the case, is it an interpolation issue?
-    # if _field_trace.same_sign_or_zero(*cvs):
-        # import pdb; pdb.set_trace()
     marked = set([(i0, j0)])
     front = [(i0, j0)]
     while front:

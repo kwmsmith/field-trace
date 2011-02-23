@@ -54,50 +54,9 @@ def test_find_nulls():
             raw_input("enter to continue")
             pl.close('all')
 
-    # for n in range(3, 5):
-        # for m in range(10, 12):
-            # yield tester, n, m
-
-    yield tester, 2, 2
-
-def _test_null_cell():
-    nc = field_trace.NullCell((10, 11), 2, (512, 512))
-    eq_(nc.covered(), set([(10,11),(11,11),(11,12),(10,12)]))
-    nc = field_trace.NullCell((10, 11), 1, (512, 512))
-    eq_(nc.covered(), set([(10,11)]))
-    nc = field_trace.NullCell((10, 10), 2, (11,11))
-    eq_(nc.covered(), set([(10,0),(0,10),(10,10),(0,0)]))
-
-def _test_eig_system():
-    N = global_N
-    n, m = 3, 4
-    test_data = tv.sin_cos_arr(N, n, m)
-
-    dd = field_trace.Derivator(test_data, N, N)
-
-    nulls = field_trace.find_null_cells(dd)
-    null_locs = [(n.x0, n.y0) for n in nulls]
-
-    for nl in null_locs:
-        evals, evecs = field_trace.eigsystem(dd, nl[0], nl[1])
-
-    for null in nulls:
-        null.is_saddle()
-
-    if 0:
-        import pylab as pl
-        pl.ion()
-        pl.imshow(test_data)
-        pl.figure()
-        pl.imshow(psi_11)
-        pl.title('XX')
-        pl.figure()
-        pl.imshow(psi_22)
-        pl.title('YY')
-        pl.figure()
-        pl.imshow(psi_12)
-        pl.title('XY')
-        raw_input("enter to continue")
+    for n in range(3, 5):
+        for m in range(3, 5):
+            yield tester, n, m
 
 def test_derivator():
     N = global_N
@@ -138,48 +97,6 @@ def test_derivator():
     compare_interps(dd.deriv11_interp, psi_11_interp, [rand_Xs, rand_Ys])
     compare_interps(dd.deriv22_interp, psi_22_interp, [rand_Xs, rand_Ys])
 
-def _test_offset():
-    N = global_N
-    n, m = 2, 4
-
-    test_data = tv.sin_cos_arr(N, n, m)
-    dd = field_trace.Derivator(test_data, N, N)
-
-    nulls = field_trace.find_null_cells(dd)
-    saddles = [null for null in nulls if null.is_saddle()]
-
-    saddle = saddles[0]
-
-    start1, start2 = saddle.outgoing_start(scale=1.0e-5)
-
-def _test_tracer():
-    N = global_N
-    n, m = 10, 15
-
-    test_data = tv.sin_cos_arr(N, n, m)
-
-    dd = field_trace.Derivator(test_data, N, N)
-
-    nulls = field_trace.find_null_cells(dd)
-    saddles = [null for null in nulls if null.is_saddle()]
-
-    saddle0s = [(s.x0, s.y0) for s in saddles]
-
-    finished, trace = field_trace.make_skeleton(
-            arr=test_data, deriv=dd, saddles=saddles, ncomb=5, start_offset=0.e-2, hit_radius=1.e-3)
-
-    if 0:
-        import pylab as pl
-        pl.ion()
-        pl.imshow(test_data)
-        X, Y = zip(*saddle0s)
-        pl.scatter(Y, X, c='k')
-        tr = np.array(trace)
-        for i in range(0, len(tr[0]), 2):
-            X,Y = tr[:,i], tr[:,i+1]
-            pl.scatter(Y, X, c='r')
-        raw_input("enter to continue")
-
 def test_level_set():
     N = 64
     n, m = 1, 4
@@ -197,9 +114,9 @@ def test_level_set():
     psi_interp = Interp2DPeriodic(N, N, test_data)
     level_val = psi_interp.eval(x0, y0)
 
-    level_sets = field_trace.level_sets(test_data, psi_interp, nulls)
+    level_sets = [null.levelset for null in nulls]
 
-    mask = field_trace.marked_to_mask(test_data.shape, level_sets.values())
+    mask = field_trace.marked_to_mask(test_data.shape, level_sets)
 
     masked_data = test_data.copy()
     masked_data[mask] = test_data.max()

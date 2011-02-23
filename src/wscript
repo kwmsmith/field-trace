@@ -10,28 +10,6 @@ def configure(conf):
     conf.env.CYTHONFLAGS = "-I../src"
 
 def build(bld):
-    # cflags = "-Wall -O3"
-    # includes = '../src /opt/local/include'
-    # lib = 'gsl gslcblas'
-    # libpath = '/Users/ksmith/lib'
-
-    # bld(
-        # features = 'c cshlib pyext',
-        # source   = 'wrap_gsl_interp.pyx',
-        # cflags   = cflags,
-        # target   = 'wrap_gsl_interp',
-        # includes = '/opt/local/include',
-        # lib      = 'gsl gslcblas',
-        # libpath = '/Library/Frameworks/EPD64.framework/Versions/Current/lib /opt/local/lib',
-        # use      = "NUMPY",
-        # )
-
-    # bld(
-        # features = 'c cshlib pyext',
-        # source = 'bilinear.pyx',
-        # cflags = cflags,
-        # target = 'bilinear',
-        # )
 
     bld(
         features = 'c cshlib',
