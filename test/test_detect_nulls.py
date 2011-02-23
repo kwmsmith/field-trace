@@ -222,7 +222,8 @@ def test_level_set():
         raw_input("enter to continue")
 
 def test_partition_regions():
-    boundary = [(i, 3) for i in range(10)] + [(i, 7) for i in range(10)]
+    boundary = np.array([(i, 3) for i in range(10)] + [(i, 7) for i in range(10)])
+    boundary = field_trace.Region(boundary[:,0], boundary[:,1])
     nx, ny = 10, 10
     regions = field_trace.partition_regions(nx, ny, boundary)
     eq_(len(regions), 2)

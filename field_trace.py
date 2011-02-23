@@ -117,11 +117,11 @@ class NullCell(object):
 
     def __init__(self, deriv, loc):
         self.deriv = deriv
-        self._levelset = None
-        self._regions = None
         self.loc = loc
         self.bounds = self.deriv.perp_deriv1.shape
         self.x0, self.y0 = find_cell_zero(self.deriv, *self.loc)
+        self._levelset = None
+        self._regions = None
 
     def get_levelset(self):
         if self._levelset is None:
@@ -139,7 +139,7 @@ class NullCell(object):
     regions = property(get_regions)
 
     def is_saddle(self):
-        if len(self.levelset) <= 3:
+        if self.levelset.size <= 3:
             return False
         return len(self.regions) > 1
 
@@ -178,8 +178,7 @@ def level_sets(arr, interp, nulls):
 def marked_to_mask(shape, marked):
     mask = np.zeros(shape, dtype=np.bool_)
     for m in marked:
-        for (i,j) in m:
-            mask[i,j] = True
+        mask[m.xs, m.ys] = True
     return mask
 
 def _level_set(arr, level_val, position):
@@ -203,13 +202,8 @@ def _level_set(arr, level_val, position):
                 marked.add((i, j))
                 front.append((i, j))
 
-    return np.array(list(marked), dtype=np.int_)
-
-# def neighbors4(i, j, nx, ny):
-    # return (((i+1)%nx, j),
-            # (i, (j+1)%ny),
-            # ((i-1)%nx, j),
-            # (i, (j-1)%ny))
+    psns = np.array(list(marked), dtype=np.int_)
+    return Region(psns[:,0], psns[:,1])
 
 neighbors4 = _field_trace.neighbors4
 
@@ -229,19 +223,20 @@ def partition_regions(nx, ny, boundary):
     regions = []
     for label in range(1, maxlabel+1):
         wh = np.where(larr == label)
-        regions.append(np.transpose(np.vstack(wh)))
+        regions.append(Region(*wh))
     return regions
 
-def set_region(arr, posns, value):
-    posns = np.asarray(posns)
-    px = posns[:,0]
-    py = posns[:,1]
-    arr[px, py] = value
+class Region(object):
 
-def _is_peak_null(nx, ny, boundary):
-    if len(boundary) <= 3:
-        return True
-    return len(partition_regions(nx, ny, boundary)) == 1
+    def __init__(self, xs, ys):
+        if len(xs) != len(ys):
+            raise ValueError("invalid coordinates")
+        self.size = len(xs)
+        self.xs = xs
+        self.ys = ys
+
+def set_region(arr, region, value):
+    arr[region.xs, region.ys] = value
 
 def connected_component_label(arr, output=None):
     '''
