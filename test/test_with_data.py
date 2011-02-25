@@ -4,6 +4,7 @@ from wrap_gsl_interp2d import Interp2DPeriodic
 import field_trace
 
 import numpy as np
+from itertools import izip
 
 import pylab as pl
 pl.ion()
@@ -181,20 +182,37 @@ def test_level_set():
 
         raw_input("enter to continue")
 
-def regions_to_mask(shape, regions):
-    mask = np.zeros(shape, dtype=np.bool_)
-    for region in regions:
-        mask[region.xs, region.ys] = True
-    return mask
-
 def test_detect_min_regions():
-    raw_input("enter to continue")
-    for idx, psi_arr in enumerate(h5_gen('data.h5', 'psi')):
-        print "array %d" % (idx+1,)
+    from itertools import izip
+
+    for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
+                                h5_gen('data.h5', 'by'),
+                                h5_gen('data.h5', 'psi')):
+        bx = bx.read()
+        by = by.read()
+        psi_arr = psi_arr.read()
         min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
-        mask = regions_to_mask(psi_arr.shape, min_regions)
-        pl.clf()
+        mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
+        pl.figure()
+        pl.imshow(bx**2 + by**2, cmap='hot')
+        pl.figure()
         pl.imshow(mask, cmap='hot', interpolation='nearest')
         raw_input("enter to continue")
+        pl.close('all')
 
-test_detect_min_regions()
+def save_figs():
+    ctr = 0
+    for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
+                                h5_gen('data.h5', 'by'),
+                                h5_gen('data.h5', 'psi')):
+        bx = bx.read()
+        by = by.read()
+        psi_arr = psi_arr.read()
+        min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
+        mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
+        print "saving to file"
+        field_trace.save_fig(bx**2 + by**2, 'bmag_%03d' % ctr)
+        field_trace.save_fig(mask, 'mask_%03d' % ctr)
+        ctr += 1
+
+save_figs()

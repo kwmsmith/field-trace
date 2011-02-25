@@ -301,7 +301,30 @@ def connected_component_label(arr, output=None):
 
     return larr
 
-def filter_min_regions(regions, min_size=0):
+# def _filter_min_regions(regions, min_size=0):
+    # '''
+    # given an iterable of regions, returns a list of all minimal regions,
+    # defined to be the set of regions that contain no other regions.
+
+    # All regions smaller than min_size are treated as though they don't exist.
+
+    # '''
+    # regions = regions[:]
+    # min_regions = []
+    # regions.sort(key=lambda r: r.size, reverse=True)
+    # while regions:
+        # cur_min = regions.pop()
+        # if cur_min.size < min_size:
+            # continue
+        # min_regions.append(cur_min)
+        # new_regions = []
+        # for region in regions:
+            # if not cur_min.is_subregion(region):
+                # new_regions.append(region)
+        # regions = new_regions
+    # return min_regions
+
+def filter_min_regions(shape, regions, min_size=0):
     '''
     given an iterable of regions, returns a list of all minimal regions,
     defined to be the set of regions that contain no other regions.
@@ -309,38 +332,52 @@ def filter_min_regions(regions, min_size=0):
     All regions smaller than min_size are treated as though they don't exist.
 
     '''
+    mask = np.zeros(shape, dtype=np.bool_)
     regions = regions[:]
     min_regions = []
-    regions.sort(key=lambda r: r.size, reverse=True)
-    while regions:
-        cur_min = regions.pop()
-        if cur_min.size < min_size:
+    regions.sort(key=lambda r: r.size)
+    for region in regions:
+        if region.size < min_size:
             continue
-        min_regions.append(cur_min)
-        new_regions = []
-        for region in regions:
-            if not cur_min.is_subregion(region):
-                new_regions.append(region)
-        regions = new_regions
+        if not np.any(mask[region.xs, region.ys]):
+            mask[region.xs, region.ys] = True
+            min_regions.append(region)
     return min_regions
 
 def detect_min_regions(arr, min_size=0):
+    import time
     arr = np.asanyarray(arr, dtype=np.double)
     N = arr.shape[0]
 
-    print "locating nulls"
+    print "%s: locating nulls" % (time.asctime())
     dd = Derivator(arr, N, N)
     nulls = find_null_cells(dd)
+    print "%s: number of nulls: %d" % (time.asctime(), len(nulls))
 
-    print "getting min regions"
+    print "%s: getting min regions" % (time.asctime())
     regions = []
     for null in nulls:
         regions.extend(null.regions)
 
-    print "number of regions: %d" % len(regions)
+    print "%s: number of regions: %d" % (time.asctime(), len(regions))
 
-    min_regions = filter_min_regions(regions, min_size=min_size)
+    min_regions = filter_min_regions(arr.shape, regions, min_size=min_size)
 
-    print "number of min regions: %d" % len(min_regions)
+    print "%s: number of min regions: %d" % (time.asctime(), len(min_regions))
 
     return min_regions
+
+def regions_to_mask(shape, regions):
+    mask = np.zeros(shape, dtype=np.bool_)
+    for region in regions:
+        mask[region.xs, region.ys] = True
+    return mask
+
+def save_fig(arr, basename, fig_exts=('.eps', '.png', '.pdf')):
+    import pylab as pl
+    pl.ioff()
+    fig = pl.figure()
+    pl.imshow(arr, interpolation='nearest', cmap='hot')
+    for ext in fig_exts:
+        pl.savefig(basename+ext)
+    pl.close(fig)
