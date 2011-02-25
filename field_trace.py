@@ -203,7 +203,7 @@ def _level_set(arr, level_val, position):
                 marked.add((i, j))
                 front.append((i, j))
 
-    psns = np.array(list(marked), dtype=np.int_)
+    psns = np.array(list(marked), dtype=np.uint16)
     return Region(psns[:,0], psns[:,1])
 
 neighbors4 = _field_trace.neighbors4
@@ -224,7 +224,8 @@ def partition_regions(nx, ny, boundary):
     regions = []
     for label in range(1, maxlabel+1):
         wh = np.where(larr == label)
-        regions.append(Region(*wh))
+        if len(wh[0]):
+            regions.append(Region(*wh))
     return regions
 
 class Region(object):
@@ -233,8 +234,26 @@ class Region(object):
         if len(xs) != len(ys):
             raise ValueError("invalid coordinates")
         self.size = len(xs)
-        self.xs = xs
-        self.ys = ys
+        self.xs = np.asanyarray(xs, dtype=np.uint16)
+        self.ys = np.asanyarray(ys, dtype=np.uint16)
+
+    def is_subregion(self, other):
+        return self.size <= other.size and \
+                np.any((self.xs[0] == other.xs) & (self.ys[0] == other.ys))
+
+    '''
+    def _is_subregion(self, other):
+        return self.size <= other.size and \
+                np.any(np.intersect1d(np.where(self.xs[0]==other.xs)[0],
+                                      np.where(self.ys[0]==other.ys)[0]))
+
+
+    def _is_subregion(self, other):
+        if self.size > other.size:
+            return False
+        idxs = np.transpose(np.vstack([other.xs, other.ys]))
+        return [self.xs[0], self.ys[0]] in idxs
+    '''
 
 def set_region(arr, region, value):
     arr[region.xs, region.ys] = value
@@ -281,3 +300,47 @@ def connected_component_label(arr, output=None):
                     marked.add(v)
 
     return larr
+
+def filter_min_regions(regions, min_size=0):
+    '''
+    given an iterable of regions, returns a list of all minimal regions,
+    defined to be the set of regions that contain no other regions.
+
+    All regions smaller than min_size are treated as though they don't exist.
+
+    '''
+    regions = regions[:]
+    min_regions = []
+    regions.sort(key=lambda r: r.size, reverse=True)
+    while regions:
+        cur_min = regions.pop()
+        if cur_min.size < min_size:
+            continue
+        min_regions.append(cur_min)
+        new_regions = []
+        for region in regions:
+            if not cur_min.is_subregion(region):
+                new_regions.append(region)
+        regions = new_regions
+    return min_regions
+
+def detect_min_regions(arr, min_size=0):
+    arr = np.asanyarray(arr, dtype=np.double)
+    N = arr.shape[0]
+
+    print "locating nulls"
+    dd = Derivator(arr, N, N)
+    nulls = find_null_cells(dd)
+
+    print "getting min regions"
+    regions = []
+    for null in nulls:
+        regions.extend(null.regions)
+
+    print "number of regions: %d" % len(regions)
+
+    min_regions = filter_min_regions(regions, min_size=min_size)
+
+    print "number of min regions: %d" % len(min_regions)
+
+    return min_regions

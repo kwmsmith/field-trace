@@ -1,8 +1,12 @@
+from kaw_analysis import test_vcalc as tv
 from wrap_gsl_interp2d import Interp2DPeriodic
 
 import field_trace
 
 import numpy as np
+
+import pylab as pl
+pl.ion()
 
 
 def h5_gen(h5file, gpname):
@@ -17,7 +21,7 @@ def h5_gen(h5file, gpname):
         yield arr
     dta.close()
 
-psi_arrs = [arr.read() for arr in h5_gen('data.h5', 'psi')]
+# psi_arrs = [arr.read() for arr in h5_gen('data.h5', 'psi')]
 # cur_arrs = [arr.read() for arr in h5_gen('data.h5', 'cur')]
 
 def upsample(arr, fac):
@@ -94,10 +98,11 @@ def test_tracer():
 # test_tracer()
 
 def test_level_set():
-    # N = 64
-    # n, m = 3, 5
+    # N = 128
+    # n, m = 10, 15
     # test_data = tv.sin_cos_arr(N, n, m)
-    test_data = psi_arrs[-1].astype(np.double)
+    arr_idx = -2
+    test_data = psi_arrs[arr_idx].astype(np.double)
     N = test_data.shape[0]
 
     print "locating nulls"
@@ -123,7 +128,33 @@ def test_level_set():
     peak0s = [(p.x0, p.y0) for p in peaks]
     saddle0s = [(s.x0, s.y0) for s in saddles]
 
+    print "getting min regions"
+    regions = []
+    for null in nulls:
+        regions.extend(null.regions)
+
+    print "number of regions: %d" % len(regions)
+
+    min_regions = field_trace.filter_min_regions(regions)
+
+    print "number of min regions: %d" % len(min_regions)
+
     print "plotting"
+
+    if 1:
+        import pylab as pl
+        pl.ion()
+        pl.figure()
+        dta = np.zeros(test_data.shape, dtype=np.int32)
+        for min_region in min_regions:
+            dta[min_region.xs, min_region.ys] = 1
+        pl.imshow(dta, interpolation='nearest')
+        pl.figure()
+        pl.imshow(cur_arrs[arr_idx])
+        pl.figure()
+        pl.imshow(psi_arrs[arr_idx])
+        raw_input("enter to continue")
+
         
     if 0:
         import pylab as pl
@@ -150,4 +181,20 @@ def test_level_set():
 
         raw_input("enter to continue")
 
-test_level_set()
+def regions_to_mask(shape, regions):
+    mask = np.zeros(shape, dtype=np.bool_)
+    for region in regions:
+        mask[region.xs, region.ys] = True
+    return mask
+
+def test_detect_min_regions():
+    raw_input("enter to continue")
+    for idx, psi_arr in enumerate(h5_gen('data.h5', 'psi')):
+        print "array %d" % (idx+1,)
+        min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
+        mask = regions_to_mask(psi_arr.shape, min_regions)
+        pl.clf()
+        pl.imshow(mask, cmap='hot', interpolation='nearest')
+        raw_input("enter to continue")
+
+test_detect_min_regions()
