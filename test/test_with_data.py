@@ -210,9 +210,13 @@ def save_figs():
         psi_arr = psi_arr.read()
         min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
         mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
+        modb = np.sqrt(bx**2 + by**2)
         print "saving to file"
-        field_trace.save_fig(bx**2 + by**2, 'bmag_%03d' % ctr)
+        field_trace.save_fig(modb, 'bmag_%03d' % ctr)
         field_trace.save_fig(mask, 'mask_%03d' % ctr)
+        overlay = modb
+        overlay[mask] = overlay.max()
+        field_trace.save_fig(overlay, 'bmagmask_%03d' % ctr)
         ctr += 1
 
 save_figs()
