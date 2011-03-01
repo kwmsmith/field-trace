@@ -200,6 +200,10 @@ def test_detect_min_regions():
         raw_input("enter to continue")
         pl.close('all')
 
+def test_region_contains():
+    for psi_arr in h5_gen('data.h5', 'psi'):
+        psi_arr = psi_arr.read()
+
 def save_figs():
     ctr = 0
     for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
@@ -208,14 +212,23 @@ def save_figs():
         bx = bx.read()
         by = by.read()
         psi_arr = psi_arr.read()
-        min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
-        mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
+        # min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
+        # mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
+        all_nulls, all_regions = field_trace.nulls_and_regions(psi_arr, chatty=True)
+        peaks = [null for null in all_nulls if null.is_peak()]
+        field_trace.find_region_ncontained(psi_arr.shape, all_regions)
+        n2regions = field_trace.regions_by_n_contained(all_regions)
+        mask = field_trace.regions_to_mask(psi_arr.shape, n2regions[1])
+        mask += field_trace.regions_to_mask(psi_arr.shape, n2regions[0])
         modb = np.sqrt(bx**2 + by**2)
         print "saving to file"
         field_trace.save_fig(modb, 'bmag_%03d' % ctr)
         field_trace.save_fig(mask, 'mask_%03d' % ctr)
         overlay = modb
         overlay[mask] = overlay.max()
+        peak_x = [peak.x0 for peak in peaks]
+        peak_y = [peak.y0 for peak in peaks]
+        field_trace.save_fig_with_scatter(overlay, (peak_x, peak_y), 'bmagmaskpeaks_%03d' % ctr)
         field_trace.save_fig(overlay, 'bmagmask_%03d' % ctr)
         ctr += 1
 

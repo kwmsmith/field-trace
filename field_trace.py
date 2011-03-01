@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -8,6 +9,7 @@ from wrap_gsl_interp2d import Interp2DPeriodic
 from nose.tools import set_trace
 
 import _field_trace
+
 
 class Derivator(object):
 
@@ -152,6 +154,9 @@ class NullCell(object):
             return False
         return len(self.regions) > 1
 
+    def is_peak(self):
+        return not self.is_saddle()
+
 _get_corner_vals = _field_trace._get_corner_vals
 
 def _get_abcd(f, i, j):
@@ -236,6 +241,7 @@ class Region(object):
         self.size = len(xs)
         self.xs = np.asanyarray(xs, dtype=np.uint16)
         self.ys = np.asanyarray(ys, dtype=np.uint16)
+        self.ncontained = 0
 
     def is_subregion(self, other):
         return self.size <= other.size and \
@@ -324,12 +330,34 @@ def connected_component_label(arr, output=None):
         # regions = new_regions
     # return min_regions
 
+def find_region_ncontained(shape, regions):
+    # '''
+    # given a collection `regions`, finds the collection of all regions `rset`
+    # contained in each region `R` and sets `R.contains` to `rset`.
+
+    # '''
+    NULL_FLAG = -1
+    map_arr = np.zeros(shape, dtype=np.int32)
+    map_arr.fill(NULL_FLAG)
+    regions = regions[:]
+    regions.sort(key=lambda r: r.size)
+    for idx, region in enumerate(regions):
+        contained_idxs = np.unique(map_arr[region.xs, region.ys])
+        # `contained_idxs` is a *sorted* array of indices into `regions`.
+        for cidx in contained_idxs:
+            if cidx == NULL_FLAG:
+                continue
+            assert cidx >= 0
+            region.ncontained += regions[cidx].ncontained + 1
+            # region.contains.append(regions[cidx])
+        map_arr[region.xs, region.ys] = idx
+
 def filter_min_regions(shape, regions, min_size=0):
     '''
-    given an iterable of regions, returns a list of all minimal regions,
+    given a collection of regions, returns a list of all minimal regions,
     defined to be the set of regions that contain no other regions.
 
-    All regions smaller than min_size are treated as though they don't exist.
+    All regions smaller than min_size are ignored.
 
     '''
     mask = np.zeros(shape, dtype=np.bool_)
@@ -344,26 +372,35 @@ def filter_min_regions(shape, regions, min_size=0):
             min_regions.append(region)
     return min_regions
 
-def detect_min_regions(arr, min_size=0):
-    import time
+def nulls_and_regions(arr, chatty=False):
     arr = np.asanyarray(arr, dtype=np.double)
     N = arr.shape[0]
-
-    print "%s: locating nulls" % (time.asctime())
     dd = Derivator(arr, N, N)
+    if chatty:
+        print "%s: locating nulls" % (time.asctime())
     nulls = find_null_cells(dd)
-    print "%s: number of nulls: %d" % (time.asctime(), len(nulls))
-
-    print "%s: getting min regions" % (time.asctime())
+    if chatty:
+        print "%s: number of nulls: %d" % (time.asctime(), len(nulls))
+    if chatty:
+        print "%s: getting regions" % (time.asctime(),)
     regions = []
     for null in nulls:
         regions.extend(null.regions)
+    if chatty:
+        print "%s: number of regions: %d" % (time.asctime(), len(regions))
+    return (nulls, regions)
 
-    print "%s: number of regions: %d" % (time.asctime(), len(regions))
+def regions_by_n_contained(regions):
+    n_to_regions = defaultdict(set)
+    for region in regions:
+        n_to_regions[region.ncontained].add(region)
+        # n_to_regions[len(region.contains)].add(region)
+    return n_to_regions
+
+def detect_min_regions(arr, min_size=0):
+    regions = all_regions(arr, chatty=True)
 
     min_regions = filter_min_regions(arr.shape, regions, min_size=min_size)
-
-    print "%s: number of min regions: %d" % (time.asctime(), len(min_regions))
 
     return min_regions
 
@@ -378,6 +415,17 @@ def save_fig(arr, basename, fig_exts=('.eps', '.png', '.pdf')):
     pl.ioff()
     fig = pl.figure()
     pl.imshow(arr, interpolation='nearest', cmap='hot')
+    for ext in fig_exts:
+        pl.savefig(basename+ext)
+    pl.close(fig)
+
+def save_fig_with_scatter(arr, scatter_xy, basename, fig_exts=('.eps', '.png', '.pdf')):
+    import pylab as pl
+    pl.ioff()
+    fig = pl.figure()
+    pl.imshow(arr, interpolation='nearest', cmap='hot')
+    X, Y = scatter_xy
+    pl.scatter(Y, X, c='b')
     for ext in fig_exts:
         pl.savefig(basename+ext)
     pl.close(fig)
