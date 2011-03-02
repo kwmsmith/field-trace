@@ -218,8 +218,9 @@ def save_figs():
         peaks = [null for null in all_nulls if null.is_peak()]
         field_trace.find_region_ncontained(psi_arr.shape, all_regions)
         n2regions = field_trace.regions_by_n_contained(all_regions)
-        mask = field_trace.regions_to_mask(psi_arr.shape, n2regions[1])
-        mask += field_trace.regions_to_mask(psi_arr.shape, n2regions[0])
+        mask = field_trace.regions_to_mask(psi_arr.shape, n2regions[0])
+        mask += field_trace.regions_to_mask(psi_arr.shape, n2regions[1])
+        mask += field_trace.regions_to_mask(psi_arr.shape, n2regions[2])
         modb = np.sqrt(bx**2 + by**2)
         print "saving to file"
         field_trace.save_fig(modb, 'bmag_%03d' % ctr)
@@ -231,5 +232,6 @@ def save_figs():
         field_trace.save_fig_with_scatter(overlay, (peak_x, peak_y), 'bmagmaskpeaks_%03d' % ctr)
         field_trace.save_fig(overlay, 'bmagmask_%03d' % ctr)
         ctr += 1
+        break
 
 save_figs()

@@ -242,6 +242,7 @@ class Region(object):
         self.xs = np.asanyarray(xs, dtype=np.uint16)
         self.ys = np.asanyarray(ys, dtype=np.uint16)
         self.ncontained = 0
+        self.contained_nulls = set()
 
     def is_subregion(self, other):
         return self.size <= other.size and \
@@ -307,29 +308,6 @@ def connected_component_label(arr, output=None):
 
     return larr
 
-# def _filter_min_regions(regions, min_size=0):
-    # '''
-    # given an iterable of regions, returns a list of all minimal regions,
-    # defined to be the set of regions that contain no other regions.
-
-    # All regions smaller than min_size are treated as though they don't exist.
-
-    # '''
-    # regions = regions[:]
-    # min_regions = []
-    # regions.sort(key=lambda r: r.size, reverse=True)
-    # while regions:
-        # cur_min = regions.pop()
-        # if cur_min.size < min_size:
-            # continue
-        # min_regions.append(cur_min)
-        # new_regions = []
-        # for region in regions:
-            # if not cur_min.is_subregion(region):
-                # new_regions.append(region)
-        # regions = new_regions
-    # return min_regions
-
 def find_region_ncontained(shape, regions):
     # '''
     # given a collection `regions`, finds the collection of all regions `rset`
@@ -351,6 +329,33 @@ def find_region_ncontained(shape, regions):
             region.ncontained += regions[cidx].ncontained + 1
             # region.contains.append(regions[cidx])
         map_arr[region.xs, region.ys] = idx
+
+def null_cover_regions(nulls, regions):
+    '''
+    Filters `regions` to the smallest set of regions that contain all nulls in
+    `nulls`.
+
+    '''
+    EMPTY_VAL = -1
+    shape = nulls[0].bounds
+    null_mask = np.empty(shape, dtype=np.int64)
+    null_mask.fill(EMPTY_VAL)
+    uncovered_nulls = set(range(len(nulls)))
+    regions = regions[:]
+    regions.sort(key=lambda r: r.size, reverse=True)
+    covering_regions = []
+    for idx, null in enumerate(nulls):
+        null_mask[null.loc[0], null.loc[1]] = idx
+    while uncovered_nulls:
+        region = regions.pop()
+        contained_nulls = np.unique(null_mask[region.xs, region.ys])
+        for null_idx in contained_nulls:
+            if null_idx in uncovered_nulls:
+                uncovered_nulls.remove(null_idx)
+                region.contained_nulls.add(null_idx)
+        if region.contained_nulls:
+            covering_regions.append(region)
+    return covering_regions
 
 def filter_min_regions(shape, regions, min_size=0):
     '''
