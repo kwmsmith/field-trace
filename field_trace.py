@@ -2,6 +2,7 @@ import time
 from collections import defaultdict
 
 import numpy as np
+from numpy.linalg import eig
 
 from kaw_analysis import vcalc
 from wrap_gsl_interp2d import Interp2DPeriodic
@@ -13,10 +14,10 @@ import _field_trace
 
 class Derivator(object):
 
-    def __init__(self, scalar_arr, len1, len2):
+    def __init__(self, scalar_arr):
         self.arr = scalar_arr
-        self.len1 = float(len1)
-        self.len2 = float(len2)
+        len1 = self.len1 = float(self.arr.shape[0])
+        len2 = self.len2 = float(self.arr.shape[1])
 
         self.arr_interp = Interp2DPeriodic(len1, len2, self.arr)
 
@@ -29,13 +30,13 @@ class Derivator(object):
         self.perp_deriv1_interp = Interp2DPeriodic(len1, len2, self.perp_deriv1)
         self.perp_deriv2_interp = Interp2DPeriodic(len1, len2, self.perp_deriv2)
 
-        deriv12 = vcalc.cderivative(self.deriv1, 'Y_DIR')
-        deriv11 = vcalc.cderivative(self.arr, 'X_DIR', order=2)
-        deriv22 = vcalc.cderivative(self.arr, 'Y_DIR', order=2)
+        self.deriv12 = vcalc.cderivative(self.deriv1, 'Y_DIR')
+        self.deriv11 = vcalc.cderivative(self.arr, 'X_DIR', order=2)
+        self.deriv22 = vcalc.cderivative(self.arr, 'Y_DIR', order=2)
 
-        self.deriv12_interp = Interp2DPeriodic(len1, len2, deriv12)
-        self.deriv11_interp = Interp2DPeriodic(len1, len2, deriv11)
-        self.deriv22_interp = Interp2DPeriodic(len1, len2, deriv22)
+        self.deriv12_interp = Interp2DPeriodic(len1, len2, self.deriv12)
+        self.deriv11_interp = Interp2DPeriodic(len1, len2, self.deriv11)
+        self.deriv22_interp = Interp2DPeriodic(len1, len2, self.deriv22)
 
 def quad_roots(A, B, C):
     '''solve quadratic equation for A x**2 + B x + C == 0'''
@@ -124,6 +125,14 @@ def is_null(xs, ys):
         return False
     return True
 
+def hessian_esys(derivs, x0, y0):
+    val_12 = derivs.deriv12_interp.eval(x0, y0)
+    mm = [[derivs.deriv11_interp.eval(x0, y0), val_12],
+          [val_12, derivs.deriv22_interp.eval(x0, y0)]]
+    evals, evecs = eig(mm)
+    return evals, evecs
+                   
+
 class NullCell(object):
 
     def __init__(self, deriv, loc):
@@ -131,6 +140,7 @@ class NullCell(object):
         self.loc = loc
         self.bounds = self.deriv.perp_deriv1.shape
         self.x0, self.y0 = find_cell_zero(self.deriv, *self.loc)
+        self.esys = hessian_esys(self.deriv, self.x0, self.y0)
         self._levelset = None
         self._regions = None
 
@@ -149,12 +159,27 @@ class NullCell(object):
 
     regions = property(get_regions)
 
+    def is_maximum(self):
+        evs, evecs = self.esys
+        # print evs
+        return evs[0] > 0 and evs[1] > 0
+
+    def is_minimum(self):
+        evs, evecs = self.esys
+        # print evs
+        return evs[0] < 0 and evs[1] < 0
+
     def is_saddle(self):
+        evs, evecs = self.esys
+        # print evs
+        return evs[0] * evs[1] < 0
+
+    def _is_saddle(self):
         if self.levelset.size <= 3:
             return False
         return len(self.regions) > 1
 
-    def is_peak(self):
+    def _is_peak(self):
         return not self.is_saddle()
 
 _get_corner_vals = _field_trace._get_corner_vals
