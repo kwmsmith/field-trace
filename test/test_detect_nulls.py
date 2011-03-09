@@ -33,15 +33,107 @@ def _test_find_null_2x2():
     finally:
         field_trace.eigsystem = oeigsystem
 
+def test_hessian_esys():
+    def tester(n, m):
+        N = global_N
+        test_data = tv.sin_cos_prod(N, n, m)
+        # from upsample import upsample
+        # test_data = upsample(test_data, factor=4)
+        dd = field_trace.Derivator(test_data)
+        arr1 = np.zeros((N, N), dtype=np.double)
+        arr2 = np.zeros((N, N), dtype=np.double)
+        for i in range(N):
+            for j in range(N):
+                evals, evecs = field_trace.hessian_esys(dd, i, j)
+                arr1[i,j] = min(evals)
+                arr2[i,j] = max(evals)
+        nulls = field_trace.find_null_cells(dd)
+        null_locs = [(null.x0, null.y0) for null in nulls]
+        saddles = [_ for _ in nulls if _.is_saddle()]
+        maxs = [_ for _ in nulls if _.is_maximum()]
+        mins = [_ for _ in nulls if _.is_minimum()]
+        saddleXs, saddleYs = [_.x0 for _ in saddles], [_.y0 for _ in saddles]
+        minXs, minYs = [_.x0 for _ in mins], [_.y0 for _ in mins]
+        maxXs, maxYs = [_.x0 for _ in maxs], [_.y0 for _ in maxs]
+
+        if 0:
+            def ims(x):
+                pl.imshow(x, interpolation='nearest', cmap='hot')
+                pl.scatter(saddleYs, saddleXs, marker='x', c='k')
+                pl.scatter(minYs, minXs, marker='o', c='b')
+                pl.scatter(maxYs, maxXs, marker='d', c='r')
+            import pylab as pl
+            pl.ion()
+            # ims(dd.deriv11)
+            # pl.figure()
+            # ims(dd.deriv22)
+            # pl.figure()
+            # ims(dd.deriv12)
+            # pl.figure()
+            ims(test_data)
+            pl.figure()
+            ims(arr1)
+            pl.figure()
+            ims(arr2)
+            pl.figure()
+            ims(arr1*arr2)
+            raw_input("enter to continue")
+            pl.close('all')
+
+        # eq_(4*n*m, len(nulls))
+
+    for n in (3, 7, 11):
+        for m in (5, 9, 10):
+            yield tester, n, m
+
+def test_max_min_saddle():
+    def tester(n, m):
+        N = global_N
+        test_data = tv.sin_cos_prod(N, n, m)
+        # from upsample import upsample
+        # test_data = upsample(test_data, factor=4)
+        dd = field_trace.Derivator(test_data)
+        nulls = field_trace.find_null_cells(dd)
+        null_locs = [(null.x0, null.y0) for null in nulls]
+        saddles = [_ for _ in nulls if _.is_saddle()]
+        maxs = [_ for _ in nulls if _.is_maximum()]
+        mins = [_ for _ in nulls if _.is_minimum()]
+        eq_(len(saddles + maxs + mins), len(nulls))
+
+        print "4*n*m: %d num_saddles: %d num_max+num_min: %d" % (4*n*m, len(saddles), len(maxs+mins))
+
+        if 1:
+            import pylab as pl
+            pl.ion()
+            pl.imshow(test_data)
+            X = [_.x0 for _ in saddles]
+            Y = [_.y0 for _ in saddles]
+            pl.scatter(Y, X, marker='x', c='k')
+            X = [_.x0 for _ in maxs]
+            Y = [_.y0 for _ in maxs]
+            pl.scatter(Y, X, c='r', marker='d')
+            X = [_.x0 for _ in mins]
+            Y = [_.y0 for _ in mins]
+            pl.scatter(Y, X, c='b', marker='o')
+            raw_input("enter to continue")
+            pl.close('all')
+
+    for n in (3, 7, 11):
+        for m in (5, 9, 10):
+            yield tester, n, m
+
+
 def test_find_nulls():
     def tester(n, m):
         N = global_N
         test_data = tv.sin_cos_arr(N, n, m)
-        dd = field_trace.Derivator(test_data, N, N)
+        from upsample import upsample
+        test_data = upsample(test_data, factor=4)
+        dd = field_trace.Derivator(test_data)
         nulls = field_trace.find_null_cells(dd)
-        eq_(4*n*m, len(nulls))
-        cell_locs = [n.loc for n in nulls]
-        null_locs = [(n.x0, n.y0) for n in nulls]
+        cell_locs = [null.loc for null in nulls]
+        null_locs = [(null.x0, null.y0) for null in nulls]
+        print 4*n*m, len(nulls)
 
         if 0:
             X, Y = zip(*null_locs)
@@ -54,15 +146,17 @@ def test_find_nulls():
             raw_input("enter to continue")
             pl.close('all')
 
-    for n in range(3, 5):
-        for m in range(3, 5):
+        # eq_(4*n*m, len(nulls))
+
+    for n in (3, 7, 11):
+        for m in (5, 9, 10):
             yield tester, n, m
 
 def test_derivator():
     N = global_N
     n, m = 10, 3
     test_data = tv.sin_cos_arr(N, n, m)
-    dd = field_trace.Derivator(test_data, N, N)
+    dd = field_trace.Derivator(test_data)
 
     psi_1 = vcalc.cderivative(test_data, 'X_DIR')
     psi_2 = vcalc.cderivative(test_data, 'Y_DIR')
@@ -102,7 +196,7 @@ def test_level_set():
     n, m = 1, 4
     test_data = tv.sin_cos_arr(N, n, m)
 
-    dd = field_trace.Derivator(test_data, N, N)
+    dd = field_trace.Derivator(test_data)
     nulls = field_trace.find_null_cells(dd)
     saddles = [null for null in nulls if null.is_saddle()]
     peaks = [null for null in nulls if not null.is_saddle()]
