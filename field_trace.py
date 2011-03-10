@@ -3,6 +3,7 @@ from collections import defaultdict
 
 import numpy as np
 from numpy.linalg import eig
+from numpy.linalg import LinAlgError
 
 from kaw_analysis import vcalc
 from wrap_gsl_interp2d import Interp2DPeriodic
@@ -10,7 +11,6 @@ from wrap_gsl_interp2d import Interp2DPeriodic
 from nose.tools import set_trace
 
 import _field_trace
-
 
 class Derivator(object):
 
@@ -125,6 +125,12 @@ def is_null(xs, ys):
         return False
     return True
 
+def grad_zero_broyden(dd, xin, yin):
+    from scipy.optimize import broyden2, broyden3
+    def __eval__(X):
+        return (dd.perp_deriv1_interp.eval(*X), dd.perp_deriv2_interp.eval(*X))
+    return broyden3(__eval__, (xin, yin), iter=10)
+
 def hessian_esys(derivs, x0, y0):
     val_12 = derivs.deriv12_interp.eval(x0, y0)
     mm = [[derivs.deriv11_interp.eval(x0, y0), val_12],
@@ -135,11 +141,14 @@ def hessian_esys(derivs, x0, y0):
 
 class NullCell(object):
 
-    def __init__(self, deriv, loc):
+    def __init__(self, deriv, loc, locmin=None):
         self.deriv = deriv
         self.loc = loc
         self.bounds = self.deriv.perp_deriv1.shape
-        self.x0, self.y0 = find_cell_zero(self.deriv, *self.loc)
+        if locmin is None:
+            self.x0, self.y0 = grad_zero_broyden(self.deriv, *self.loc)
+        else:
+            self.x0, self.y0 = locmin
         self.esys = hessian_esys(self.deriv, self.x0, self.y0)
         self._levelset = None
         self._regions = None
@@ -161,26 +170,15 @@ class NullCell(object):
 
     def is_maximum(self):
         evs, evecs = self.esys
-        # print evs
-        return evs[0] > 0 and evs[1] > 0
+        return evs[0] < 0 and evs[1] < 0
 
     def is_minimum(self):
         evs, evecs = self.esys
-        # print evs
-        return evs[0] < 0 and evs[1] < 0
+        return evs[0] > 0 and evs[1] > 0
 
     def is_saddle(self):
         evs, evecs = self.esys
-        # print evs
         return evs[0] * evs[1] < 0
-
-    def _is_saddle(self):
-        if self.levelset.size <= 3:
-            return False
-        return len(self.regions) > 1
-
-    def _is_peak(self):
-        return not self.is_saddle()
 
 _get_corner_vals = _field_trace._get_corner_vals
 
@@ -194,6 +192,30 @@ def _get_abcd(f, i, j):
 
     return (a, b, c, d)
 
+def find_null_cells_minimize(deriv, thresh_frac=0.05):
+    from scipy.optimize import fmin_powell
+    grad2 = deriv.deriv1**2 + deriv.deriv2**2
+    grad2_interp = Interp2DPeriodic(grad2.shape[0], grad2.shape[1], grad2)
+    nx, ny = grad2.shape
+    cx, cy = np.where(grad2 < thresh_frac * grad2.max())
+    null_cells = []
+    marked_cells = set()
+    def __eval__(X):
+        return grad2_interp.eval(*X)
+    for (i,j) in zip(cx, cy):
+        try:
+            xmin, ymin = fmin_powell(__eval__, (i,j), disp=0)
+        except LinAlgError:
+            continue
+        if (int(xmin), int(ymin)) not in marked_cells:
+            try:
+                nc = NullCell(deriv, (i,j), locmin=(xmin, ymin))
+            except LinAlgError:
+                continue
+            null_cells.append(nc)
+            marked_cells.add((int(xmin), int(ymin)))
+    return null_cells
+
 def find_null_cells(deriv):
     null_cells = []
     nx, ny = deriv.perp_deriv1.shape
@@ -206,7 +228,8 @@ def find_null_cells(deriv):
                     null_cells.append(NullCell(deriv, (i,j)))
                 except ValueError:
                     pass
-
+                except LinAlgError:
+                    pass
     return null_cells
 
 def marked_to_mask(shape, marked):
@@ -402,10 +425,16 @@ def filter_min_regions(shape, regions, min_size=0):
             min_regions.append(region)
     return min_regions
 
+def get_nulls(arr):
+    arr = np.asanyarray(arr, dtype=np.double)
+    dd = Derivator(arr)
+    # return find_null_cells(dd)
+    return find_null_cells_minimize(dd, thresh_frac=0.02)
+
 def nulls_and_regions(arr, chatty=False):
     arr = np.asanyarray(arr, dtype=np.double)
     N = arr.shape[0]
-    dd = Derivator(arr, N, N)
+    dd = Derivator(arr)
     if chatty:
         print "%s: locating nulls" % (time.asctime())
     nulls = find_null_cells(dd)

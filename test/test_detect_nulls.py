@@ -47,7 +47,7 @@ def test_hessian_esys():
                 evals, evecs = field_trace.hessian_esys(dd, i, j)
                 arr1[i,j] = min(evals)
                 arr2[i,j] = max(evals)
-        nulls = field_trace.find_null_cells(dd)
+        nulls = field_trace.find_null_cells_minimize(dd)
         null_locs = [(null.x0, null.y0) for null in nulls]
         saddles = [_ for _ in nulls if _.is_saddle()]
         maxs = [_ for _ in nulls if _.is_maximum()]
@@ -90,17 +90,18 @@ def test_max_min_saddle():
     def tester(n, m):
         N = global_N
         test_data = tv.sin_cos_prod(N, n, m)
-        # from upsample import upsample
-        # test_data = upsample(test_data, factor=4)
+        from upsample import upsample
+        test_data = upsample(test_data, factor=4)
         dd = field_trace.Derivator(test_data)
-        nulls = field_trace.find_null_cells(dd)
+        nulls = field_trace.find_null_cells_minimize(dd)
         null_locs = [(null.x0, null.y0) for null in nulls]
         saddles = [_ for _ in nulls if _.is_saddle()]
         maxs = [_ for _ in nulls if _.is_maximum()]
         mins = [_ for _ in nulls if _.is_minimum()]
         eq_(len(saddles + maxs + mins), len(nulls))
 
-        print "4*n*m: %d num_saddles: %d num_max+num_min: %d" % (4*n*m, len(saddles), len(maxs+mins))
+        print ("4*n*m: %d num_saddles: %d num_max+num_min: %d" %
+                (4*n*m, len(saddles), len(maxs+mins)))
 
         if 1:
             import pylab as pl
@@ -130,7 +131,7 @@ def test_find_nulls():
         from upsample import upsample
         test_data = upsample(test_data, factor=4)
         dd = field_trace.Derivator(test_data)
-        nulls = field_trace.find_null_cells(dd)
+        nulls = field_trace.find_null_cells_minimize(dd)
         cell_locs = [null.loc for null in nulls]
         null_locs = [(null.x0, null.y0) for null in nulls]
         print 4*n*m, len(nulls)

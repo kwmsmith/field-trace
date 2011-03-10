@@ -204,20 +204,39 @@ def test_region_contains():
     for psi_arr in h5_gen('data.h5', 'psi'):
         psi_arr = psi_arr.read()
 
+def num_nonredundant_nulls(nulls, shape):
+    from scipy.ndimage import label
+    arr = np.zeros(shape, dtype=np.int32)
+    for null in nulls:
+        arr[null.loc] = 1
+    larr, nlabels = label(arr)
+    return nlabels
+
 def save_figs():
+    from upsample import upsample
     ctr = 0
     for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
                                 h5_gen('data.h5', 'by'),
                                 h5_gen('data.h5', 'psi')):
-        bx = bx.read()
-        by = by.read()
-        psi_arr = psi_arr.read()
+        bx = upsample(bx.read(), factor=1)
+        by = upsample(by.read(), factor=1)
+        psi_arr = upsample(psi_arr.read(), factor=1)
         # min_regions = field_trace.detect_min_regions(psi_arr, min_size=20)
         # mask = field_trace.regions_to_mask(psi_arr.shape, min_regions)
-        all_nulls, all_regions = field_trace.nulls_and_regions(psi_arr, chatty=True)
-        peaks = [null for null in all_nulls if null.is_peak()]
-        print "num peaks: %d" % (len(peaks))
-        print "num saddles: %d" % (len(all_nulls) - len(peaks))
+        # all_nulls, all_regions = field_trace.nulls_and_regions(psi_arr, chatty=True)
+        all_nulls = field_trace.get_nulls(psi_arr)
+        mins = [null for null in all_nulls if null.is_minimum()]
+        maxs = [null for null in all_nulls if null.is_maximum()]
+        saddles = [null for null in all_nulls if null.is_saddle()]
+        print "-"*80
+        print "num mins: %d unique mins: %d" % (len(mins), num_nonredundant_nulls(mins, psi_arr.shape))
+        print "num maxs: %d unique maxs: %d" % (len(maxs), num_nonredundant_nulls(maxs, psi_arr.shape))
+        print "num saddles: %d unique saddles: %d" % (len(saddles), num_nonredundant_nulls(saddles, psi_arr.shape))
+        print "num nulls: %d unique nulls: %d" % (len(all_nulls), num_nonredundant_nulls(all_nulls, psi_arr.shape))
+        # print "peaks - saddles: %d" % (len(maxs)+len(mins) - len(saddles))
+        # print "num maxs: %d" % (len(maxs))
+        # print "num mins: %d" % (len(mins))
+        # print "num saddles: %d" % (len(saddles))
         # field_trace.find_region_ncontained(psi_arr.shape, all_regions)
         # n2regions = field_trace.regions_by_n_contained(all_regions)
         # mask = field_trace.regions_to_mask(psi_arr.shape, n2regions[0])
