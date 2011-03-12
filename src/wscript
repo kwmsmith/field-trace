@@ -33,8 +33,8 @@ def build(bld):
 
     bld(
         features = 'c cshlib pyext',
-        source   = '_triangulate.pyx',
-        target   = '_triangulate',
+        source   = '_critical_points.pyx',
+        target   = '_critical_points',
         use      = "NUMPY",
         )
 

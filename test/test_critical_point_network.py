@@ -1,7 +1,8 @@
 import scipy as sp
 from scipy import ndimage
 import numpy as np
-import _triangulate as _tri
+
+import _critical_points as _cp
 from upsample import upsample
 
 from kaw_analysis import test_vcalc as tv
@@ -26,20 +27,20 @@ def add_noise(arr, rms_frac=0.001):
     noise = np.random.normal(scale=rms_frac*rms, size=arr.shape)
     return arr + noise
 
-def test_triangulate():
+def test_critical_points():
 
     def _tester(arr, vis=False):
         print "\nmeshing array"
-        gr = _tri.mesh(arr)
+        gr = _cp.mesh(arr)
         print "classifying nodes"
-        classes = _tri.classify_nodes(arr, gr)
+        classes = _cp.classify_nodes(arr, gr)
         passes = classes['passes']
         pits = classes['pits']
         peaks = classes['peaks']
         eq_(len(peaks) + len(pits), len(passes))
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "getting surface network"
-        snet = _tri.surface_network(arr, gr, passes, peaks, pits)
+        snet = _cp.surface_network(arr, gr, passes, peaks, pits)
         if vis:
             visualize(arr, gr=None, classes=classes, surf_network=None)
             raw_input('enter to continue')
