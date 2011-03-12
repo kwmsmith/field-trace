@@ -253,6 +253,6 @@ def save_figs():
         # field_trace.save_fig_with_scatter(overlay, (peak_x, peak_y), 'bmagmaskpeaks_%03d' % ctr)
         # field_trace.save_fig(overlay, 'bmagmask_%03d' % ctr)
         # ctr += 1
-        # break
+        break
 
 save_figs()

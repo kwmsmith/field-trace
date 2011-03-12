@@ -1,77 +1,23 @@
-cdef extern from "math.h":
-    double sqrt(double)
+def envelope(a, b, c, d):
+    if b + d >= a + c:
+        return 'bd'
+    else:
+        return 'ac'
 
-cdef class vec:
-    cdef double x, y, z
+def flattest(a, b, c, d):
+    if (d - b)**2 >= (a - c)**2:
+        return 'ac'
+    else:
+        return 'bd'
 
-    def __init__(self, x=0.0, y=0.0, z=0.0):
-        self.x = x
-        self.y = y
-        self.z = z
-
-    property x:
-        def __get__(self):
-            return self.x
-
-    property y:
-        def __get__(self):
-            return self.y
-
-    property z:
-        def __get__(self):
-            return self.z
-
-    cpdef vec crossp(s, o):
-        return vec(s.y * o.z - o.y * s.z,
-                   -s.x * o.z + o.x * s.z,
-                   s.x * o.y - o.x * s.y)
-
-    def __richcmp__(self, other, int op):
-        if op == 2: # eqiv to __eq__(self, other)
-            return (self.x == other.x and
-                    self.y == other.y and
-                    self.z == other.z)
-        else:
-            raise NotImplementedError()
-
-    cpdef vec sub(self, other):
-        return vec(self.x - other.x,
-                   self.y - other.y,
-                   self.z - other.z)
-
-    def __sub__(self, other):
-        return self.sub(other)
-
-    def __rsub__(self, other):
-        return other.sub(self)
-
-    cpdef double dot(self, other):
-        return (self.x * other.x +
-                self.y * other.y +
-                self.z * other.z)
-
-    def norm(self):
-        return sqrt(self.dot(self))
-
-def tri_plane_cos(vec a, vec b, vec c, vec d):
-    cdef vec v1 = b.sub(a)
-    cdef vec v2 = d.sub(a)
-    cdef vec v3 = b.sub(c)
-    cdef vec v4 = d.sub(c)
-    cdef vec n1 = v2.crossp(v1)
-    cdef vec n2 = v3.crossp(v4)
-    return n1.dot(n2) / (n1.norm() * n2.norm())
-
-def tri_plane_cos_from_z(za, zb, zc, zd):
-    # A ----- B
-    # |       |
-    # |       |
-    # |       |
-    # D ----- C
-    return tri_plane_cos(vec(0, 0, z=za),
-                         vec(0, 1, z=zb),
-                         vec(1, 1, z=zc),
-                         vec(1, 0, z=zd))
+def connect_diagonal(a, b, c, d):
+    """
+    returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
+    
+    """
+    return flattest(a, b, c, d)
+    # return envelope(a, b, c, d)
+    # return 'ac'
 
 class graph:
 
@@ -98,10 +44,90 @@ def mesh(arr):
             b = arr[i,(j+1)%ny]
             c = arr[(i+1)%nx, (j+1)%ny]
             d = arr[(i+1)%nx, j]
-            tpc_bd = tri_plane_cos_from_z(a, b, c, d)
-            tpc_ac = tri_plane_cos_from_z(b, c, d, a)
-            if tpc_bd >= tpc_ac:
+            if connect_diagonal(a, b, c, d) == 'ac':
+                G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
+            elif connect_diagonal(a, b, c, d) == 'bd':
                 G.add_edge((i,(j+1)%ny), ((i+1)%nx, j))
             else:
-                G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
+                raise RuntimeError("invalid return value from connect_diagonal")
     return G
+
+def order_neighbors(node, neighbors, shape):
+    nx, ny = shape
+    i, j = node
+    ord_neighbors = []
+    for n in (((i-1)%nx, (j-1)%ny),
+                   (i,        (j-1)%ny),
+                   ((i+1)%nx, (j-1)%ny),
+                   ((i+1)%nx,  j      ),
+                   ((i+1)%nx, (j+1)%ny),
+                   (i       , (j+1)%ny),
+                   ((i-1)%nx, (j+1)%ny),
+                   ((i-1)%nx,  j      )):
+        if n in neighbors:
+            ord_neighbors.append(n)
+    assert 4 <= len(neighbors) <= 8
+    assert set(ord_neighbors) == neighbors
+    return ord_neighbors
+
+def classify_nodes(arr, gr):
+    classes = {'peaks': set(),
+               'pits' : set(),
+               'passes' : set(),
+               }
+    for node in gr._g:
+        ordered_neighbors = order_neighbors(node, gr._g[node], arr.shape)
+        diffs = [arr[n] - arr[node] for n in ordered_neighbors]
+        assert any(diffs)
+        diff_neg = diff_pos = 0.0
+        for d in diffs:
+            if d < 0:
+                diff_neg += -d
+            else:
+                diff_pos += d
+        n_change = 0
+        for idx in range(len(diffs)):
+            if diffs[idx] == 0.0 and diffs[idx-1] * diffs[(idx+1)%len(diffs)] < 0:
+                n_change += 1
+            elif diffs[idx-1] * diffs[idx] < 0:
+                n_change += 1
+        if n_change == 0:
+            if diff_neg > 0 and diff_pos == 0.0:
+                classes['peaks'].add(node)
+            elif diff_pos > 0 and diff_neg == 0.0:
+                classes['pits'].add(node)
+        elif n_change == 4 and (diff_pos + diff_neg) > 0:
+            classes['passes'].add(node)
+    return classes
+
+def sort_by_h(gr, arr):
+    sgr = {}
+    for node in gr._g:
+        h_sort = sorted(gr._g[node], key=lambda n: arr[n])
+        sgr[node] = h_sort
+    return sgr
+
+def surface_network(arr, gr, passes, peaks, pits):
+    ctr_max = 4 * arr.shape[0]
+    peaks_n_pits = peaks.union(pits)
+    snet = graph()
+    h_sorted_gr = sort_by_h(gr, arr)
+    for p in passes:
+        # get the two highest (lowest) neighbors to p.
+        higher = h_sorted_gr[p][-2:]
+        lower = h_sorted_gr[p][:2]
+        nbrs_and_dir = ((higher, 'up'),
+                        (lower , 'down'))
+        for ns, dir in nbrs_and_dir:
+            for n in ns:
+                cur = n
+                ctr = 0
+                while cur not in peaks_n_pits and ctr < ctr_max:
+                    if dir == 'up':
+                        cur = h_sorted_gr[cur][-1]
+                    else:
+                        cur = h_sorted_gr[cur][0]
+                    ctr += 1
+                if ctr < ctr_max:
+                    snet.add_edge(cur, p)
+    return snet
