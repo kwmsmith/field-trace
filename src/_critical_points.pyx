@@ -131,3 +131,23 @@ def surface_network(arr, gr, passes, peaks, pits):
                 if ctr < ctr_max:
                     snet.add_edge(cur, p)
     return snet
+
+def peak_pit_regions(arr, snet, classes):
+    raise RuntimeError("not finished!!!")
+    peaks = classes['peaks']
+    pits = classes['pits']
+    regions = {}
+    for node in snet._g:
+        if node in peaks:
+            regions[node] = find_peak_region(node, snet, arr)
+        elif node in pits:
+            regions[node] = find_pit_region(node, snet, arr)
+    return regions
+
+def find_peak_region(node, snet, arr):
+    raise RuntimeError("not finished!!!")
+    for passes in snet._g[node]:
+        h_sort = sorted(snet._g[node], key=lambda n: arr[n])
+        highest_pass = h_sort[-1]
+        h_val = arr[highest_pass]
+        # while 

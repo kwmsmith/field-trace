@@ -41,12 +41,19 @@ def test_critical_points():
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "getting surface network"
         snet = _cp.surface_network(arr, gr, passes, peaks, pits)
+        snet_points = set(snet._g.keys())
+        missed_passes = passes.difference(snet_points)
+        missed_pits = pits.difference(snet_points)
+        missed_peaks = peaks.difference(snet_points)
+        print "missed passes: %d" % len(missed_passes)
+        print "missed peaks: %d" % len(missed_peaks)
+        print "missed pits: %d" % len(missed_pits)
         if vis:
             visualize(arr, gr=None, classes=classes, surf_network=None)
             raw_input('enter to continue')
 
     for _ in range(4):
-        yield _tester, random_periodic_upsample(128, 4, seed=None), False
+        yield _tester, random_periodic_upsample(128, 4, seed=None), True
 
 def visualize(arr, gr=None, classes=None, surf_network=None):
     import pylab as pl
