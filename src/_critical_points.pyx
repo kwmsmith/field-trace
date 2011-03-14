@@ -1,23 +1,29 @@
-def envelope(a, b, c, d):
+# cython: profile=True
+
+
+cdef int AC = 0
+cdef int BD = 1
+
+cdef int envelope(double a, double b, double c, double d):
     if b + d >= a + c:
-        return 'bd'
+        return BD
     else:
-        return 'ac'
+        return AC
 
-def flattest(a, b, c, d):
-    if (d - b)**2 >= (a - c)**2:
-        return 'ac'
+cdef int flattest(double a, double b, double c, double d):
+    if (d - b)*(d - b) >= (a - c)*(a - c):
+        return AC
     else:
-        return 'bd'
+        return BD
 
-def connect_diagonal(a, b, c, d):
+cdef int connect_diagonal(double a, double b, double c, double d):
     """
     returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
     
     """
     return flattest(a, b, c, d)
     # return envelope(a, b, c, d)
-    # return 'ac'
+    # return AC
 
 class graph(object):
 
@@ -51,9 +57,11 @@ class graph(object):
             self._g[node] = ord_neighbors
 
 def sort_by_h(gr, arr):
+    def _keyfunc(n):
+        return arr[n]
     sgr = {}
     for node in gr._g:
-        h_sort = sorted(gr._g[node], key=lambda n: arr[n])
+        h_sort = sorted(gr._g[node], key=_keyfunc)
         sgr[node] = h_sort
     return sgr
 
@@ -80,9 +88,9 @@ class TopoSurface(object):
                 b = self.arr[i,(j+1)%ny]
                 c = self.arr[(i+1)%nx, (j+1)%ny]
                 d = self.arr[(i+1)%nx, j]
-                if connect_diagonal(a, b, c, d) == 'ac':
+                if connect_diagonal(a, b, c, d) == AC:
                     G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
-                elif connect_diagonal(a, b, c, d) == 'bd':
+                elif connect_diagonal(a, b, c, d) == BD:
                     G.add_edge((i,(j+1)%ny), ((i+1)%nx, j))
                 else:
                     raise RuntimeError("invalid return value from connect_diagonal")
@@ -90,6 +98,8 @@ class TopoSurface(object):
         return G
 
     def get_crit_pts(self):
+        cdef double diff_neg, diff_pos, diff1, diff2
+        cdef int n_change, idx
         crit_pts = {'peaks': set(),
                    'pits' : set(),
                    'passes' : set(),
@@ -97,19 +107,22 @@ class TopoSurface(object):
         for node in self.mesh._g:
             nbrs = self.mesh._g[node]
             diffs = [self.arr[n] - self.arr[node] for n in nbrs]
-            assert any(diffs)
+            # assert any(diffs)
             diff_neg = diff_pos = 0.0
             for d in diffs:
-                if d < 0:
-                    diff_neg += -d
+                dd = d
+                if dd < 0:
+                    diff_neg += -dd
                 else:
-                    diff_pos += d
+                    diff_pos += dd
             n_change = 0
             for idx in range(len(diffs)):
+                diff1 = diffs[idx-1]
+                diff2 = diffs[idx]
                 # if diffs[idx] == 0.0 and diffs[idx-1] * diffs[(idx+1)%len(diffs)] < 0:
                     # n_change += 1
                 # elif diffs[idx-1] * diffs[idx] < 0:
-                if diffs[idx-1] * diffs[idx] < 0:
+                if diff1 * diff2 < 0:
                     n_change += 1
             if n_change == 0:
                 if diff_neg > 0 and diff_pos == 0.0:

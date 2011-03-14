@@ -52,8 +52,8 @@ def test_critical_points():
             visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=None)
             raw_input('enter to continue')
 
-    for _ in range(3):
-        yield _tester, random_periodic_upsample(128, 8, seed=None), False
+    for _ in range(1):
+        yield _tester, random_periodic_upsample(256, 8, seed=None), False
 
 def visualize(arr, mesh=None, crit_pts=None, surf_network=None):
     import pylab as pl
