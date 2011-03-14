@@ -49,11 +49,11 @@ def test_critical_points():
         eq_(len(peaks) + len(pits), len(passes))
         eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
         if vis:
-            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=None)
+            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
             raw_input('enter to continue')
 
     for _ in range(1):
-        yield _tester, random_periodic_upsample(256, 8, seed=None), False
+        yield _tester, random_periodic_upsample(64, 8, seed=None), True
 
 def visualize(arr, mesh=None, crit_pts=None, surf_network=None):
     import pylab as pl

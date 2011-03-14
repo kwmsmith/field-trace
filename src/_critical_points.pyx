@@ -36,6 +36,15 @@ class graph(object):
             self._g[a].append(b)
             self._g[b].append(a)
 
+    def remove_node(self, nd):
+        if nd in self._g:
+            del self._g[nd]
+
+    def remove_edge(self, a, b):
+        if b in self._g[a]:
+            self._g[a].remove(b)
+            self._g[b].remove(a)
+
     def order_neighbors(self, shape):
         nx, ny = shape
         for node in self._g:
@@ -56,9 +65,19 @@ class graph(object):
             assert set(ord_neighbors) == set(neighbors)
             self._g[node] = ord_neighbors
 
+    def order_by_key(self, keyfunc):
+        for node in self._g:
+            self._g[node].sort(key=keyfunc)
+
+    def deepcopy(self):
+        from copy import deepcopy
+        g = graph()
+        g._g = deepcopy(self._g)
+        return g
+
 def sort_by_h(gr, arr):
     def _keyfunc(n):
-        return arr[n]
+        return (arr[n], n)
     sgr = {}
     for node in gr._g:
         h_sort = sorted(gr._g[node], key=_keyfunc)
@@ -71,6 +90,7 @@ class TopoSurface(object):
     def __init__(self, arr):
         self.arr = arr
         self.mesh = self.get_mesh()
+        self.h_sorted_mesh = sort_by_h(self.mesh, self.arr)
         self.crit_pts = self.get_crit_pts()
         self.surf_network = self.get_surface_network()
 
@@ -140,7 +160,6 @@ class TopoSurface(object):
         ctr_max = 4 * self.arr.shape[0]
         peaks_n_pits = peaks.union(pits)
         snet = graph()
-        h_sorted_mesh = sort_by_h(self.mesh, self.arr)
         for p in passes:
             # get the two highest (lowest) neighbors to p.
             higher, lower = self.separated_pass_nbrs(p)
@@ -152,9 +171,9 @@ class TopoSurface(object):
                     ctr = 0
                     while cur not in peaks_n_pits and ctr < ctr_max:
                         if dir == 'up':
-                            cur = h_sorted_mesh[cur][-1]
+                            cur = self.h_sorted_mesh[cur][-1]
                         else:
-                            cur = h_sorted_mesh[cur][0]
+                            cur = self.h_sorted_mesh[cur][0]
                         ctr += 1
                     if ctr < ctr_max:
                         snet.add_edge(cur, p)
@@ -178,3 +197,29 @@ class TopoSurface(object):
             elif diffs[idx] == 0.0:
                 raise RuntimeError("gotcha: %s" % diffs)
         return higher, lower
+
+    def _keyfunc(self, node):
+        return (self.arr[node], node)
+
+    def reeb_graph(self):
+        # make a copy of the surface network that we can destroy while creating
+        # the reeb graph.
+        surf = self.surf_network.deepcopy()
+        surf.order_by_key(keyfunc=self._keyfunc)
+        reeb = graph()
+        peaks = self.crit_pts['peaks'].copy()
+        passes = self.crit_pts['passes'].copy()
+        pits = self.crit_pts['pits'].copy()
+        new_peaks = []
+        for peak in peaks:
+            # connect the peak to its highest pass.
+            highest_pass = surf._g[peak][-1]
+            assert highest_pass in passes
+            reeb.add_edge(peak, highest_pass)
+            for lower_pass in surf._g[peak][:-1]:
+                surf.remove_edge(peak, lower_pass)
+                surf.add_edge(highest_pass, lower_pass)
+            
+
+
+        # connect every pit to its lowest pass.
