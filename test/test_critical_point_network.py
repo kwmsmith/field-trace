@@ -30,17 +30,12 @@ def add_noise(arr, rms_frac=0.001):
 def test_critical_points():
 
     def _tester(arr, vis=False):
-        print "\nmeshing array"
-        gr = _cp.mesh(arr)
-        print "classifying nodes"
-        classes = _cp.classify_nodes(arr, gr)
-        passes = classes['passes']
-        pits = classes['pits']
-        peaks = classes['peaks']
-        eq_(len(peaks) + len(pits), len(passes))
-        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
-        print "getting surface network"
-        snet = _cp.surface_network(arr, gr, passes, peaks, pits)
+        surf = _cp.TopoSurface(arr)
+        peaks = surf.crit_pts['peaks']
+        pits = surf.crit_pts['pits']
+        passes = surf.crit_pts['passes']
+        print "\npeaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
+        snet = surf.surf_network
         snet_points = set(snet._g.keys())
         missed_passes = passes.difference(snet_points)
         missed_pits = pits.difference(snet_points)
@@ -48,24 +43,29 @@ def test_critical_points():
         print "missed passes: %d" % len(missed_passes)
         print "missed peaks: %d" % len(missed_peaks)
         print "missed pits: %d" % len(missed_pits)
+        eq_(len(missed_passes), 0)
+        eq_(len(missed_peaks), 0)
+        eq_(len(missed_pits), 0)
+        eq_(len(peaks) + len(pits), len(passes))
+        eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
         if vis:
-            visualize(arr, gr=None, classes=classes, surf_network=None)
+            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=None)
             raw_input('enter to continue')
 
-    for _ in range(4):
-        yield _tester, random_periodic_upsample(128, 4, seed=None), True
+    for _ in range(3):
+        yield _tester, random_periodic_upsample(128, 8, seed=None), False
 
-def visualize(arr, gr=None, classes=None, surf_network=None):
+def visualize(arr, mesh=None, crit_pts=None, surf_network=None):
     import pylab as pl
     pl.ioff()
     fig = pl.figure()
     # pl.imshow(arr, interpolation='nearest', cmap='jet')
     pl.imshow(arr, cmap='jet', interpolation='nearest')
     nx, ny = arr.shape
-    if gr is not None:
+    if mesh is not None:
         for i in range(1, nx-1):
             for j in range(1, ny-1):
-                other_pts = gr._g[i,j]
+                other_pts = mesh._g[i,j]
                 for x,y in other_pts:
                     pl.plot([j,y], [i,x], 'k--')
     if surf_network is not None:
@@ -75,8 +75,8 @@ def visualize(arr, gr=None, classes=None, surf_network=None):
             for nbr in nbrs:
                 nbr_x, nbr_y = nbr
                 pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--')
-    if classes is not None:
-        pits, passes, peaks = classes['pits'], classes['passes'], classes['peaks']
+    if crit_pts is not None:
+        pits, passes, peaks = crit_pts['pits'], crit_pts['passes'], crit_pts['peaks']
         X = [_[0] for _ in pits]
         Y = [_[1] for _ in pits]
         pl.scatter(Y, X, marker='o', c='b', s=50)
