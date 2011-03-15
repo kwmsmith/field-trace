@@ -1,5 +1,6 @@
 # cython: profile=True
 
+from pprint import pprint, pformat
 
 cdef int AC = 0
 cdef int BD = 1
@@ -168,15 +169,12 @@ class TopoSurface(object):
             for ns, dir in nbrs_and_dir:
                 for n in ns:
                     cur = n
-                    ctr = 0
-                    while cur not in peaks_n_pits and ctr < ctr_max:
+                    while cur not in peaks_n_pits:
                         if dir == 'up':
                             cur = self.h_sorted_mesh[cur][-1]
                         else:
                             cur = self.h_sorted_mesh[cur][0]
-                        ctr += 1
-                    if ctr < ctr_max:
-                        snet.add_edge(cur, p)
+                    snet.add_edge(cur, p)
         return snet
 
     def separated_pass_nbrs(self, pss):
@@ -198,28 +196,100 @@ class TopoSurface(object):
                 raise RuntimeError("gotcha: %s" % diffs)
         return higher, lower
 
-    def _keyfunc(self, node):
+    def node_height(self, node):
         return (self.arr[node], node)
 
-    def reeb_graph(self):
-        # make a copy of the surface network that we can destroy while creating
-        # the reeb graph.
-        surf = self.surf_network.deepcopy()
-        surf.order_by_key(keyfunc=self._keyfunc)
-        reeb = graph()
-        peaks = self.crit_pts['peaks'].copy()
-        passes = self.crit_pts['passes'].copy()
-        pits = self.crit_pts['pits'].copy()
-        new_peaks = []
-        for peak in peaks:
-            # connect the peak to its highest pass.
-            highest_pass = surf._g[peak][-1]
-            assert highest_pass in passes
-            reeb.add_edge(peak, highest_pass)
-            for lower_pass in surf._g[peak][:-1]:
-                surf.remove_edge(peak, lower_pass)
-                surf.add_edge(highest_pass, lower_pass)
-            
+    def get_reeb_graph(self):
+        return get_reeb_graph(self.surf_network, self.crit_pts, self.node_height)
 
+def is_pit_like(node, pits, passes, reeb, snet, node2h):
+    if node in pits:
+        return True
+    elif node not in passes:
+        # it's a peak
+        return False
+    reeb_nbrs = reeb._g[node]
+    if len(reeb_nbrs) != 2:
+        return False
+    node_h = node2h(node)
+    snet_nbrs = snet._g[node]
+    for nbr in snet_nbrs:
+        nbr_h = node2h(nbr)
+        if nbr_h < node_h:
+            return False
+    return True
 
-        # connect every pit to its lowest pass.
+def is_peak_like(node, peaks, passes, reeb, snet, node2h):
+    if node in peaks:
+        return True
+    elif node not in passes:
+        # it's a pit
+        return False
+    reeb_nbrs = reeb._g[node]
+    if len(reeb_nbrs) != 2:
+        return False
+    node_h = node2h(node)
+    snet_nbrs = snet._g[node]
+    for nbr in snet_nbrs:
+        nbr_h = node2h(nbr)
+        if nbr_h > node_h:
+            return False
+    return True
+
+def is_unfinished(node, passes, gr):
+    nbrs = gr._g[node]
+    print node, "node in passes: %s" % (node in passes), "len(nbrs) = %d" % len(nbrs)
+    return node in passes and len(nbrs) != 3
+
+def get_reeb_graph(surf_net, crit_pts, node2h):
+    # make a copy of the surface network that we can destroy while creating
+    # the reeb graph.
+    ####
+    # print "*** surface network ***", pformat(dict(surf_net._g))
+    # print "crit pts: ", pformat(crit_pts)
+    # for tp in crit_pts:
+        # for node in crit_pts[tp]:
+            # print "%s: %s," % (node, node2h(node))
+    surf = surf_net.deepcopy()
+    surf.order_by_key(keyfunc=node2h)
+    reeb = graph()
+    peaks  = crit_pts['peaks']
+    passes = crit_pts['passes']
+    pits   = crit_pts['pits']
+    unfinished = []
+    unfinished.extend(peaks)
+    unfinished.extend(passes)
+    unfinished.extend(pits)
+    while unfinished:
+        new_unfinished = []
+        for node in unfinished:
+            if is_peak_like(node, peaks, passes, reeb, surf, node2h):
+                # connect the peak to its highest pass.
+                highest_pass = surf._g[node][-1]
+                # assert highest_pass in passes
+                reeb.add_edge(node, highest_pass)
+                for lower_pass in surf._g[node][:-1]:
+                    # assert lower_pass in passes
+                    surf.remove_edge(node, lower_pass)
+                    surf.add_edge(highest_pass, lower_pass)
+                surf.remove_edge(node, highest_pass)
+            elif is_pit_like(node, pits, passes, reeb, surf, node2h):
+                # connect the pit to its lowest pass.
+                lowest_pass = surf._g[node][0]
+                # assert lowest_pass in passes
+                reeb.add_edge(node, lowest_pass)
+                for higher_pass in surf._g[node][1:]:
+                    # assert higher_pass in passes
+                    surf.remove_edge(node, higher_pass)
+                    surf.add_edge(lowest_pass, higher_pass)
+                surf.remove_edge(node, lowest_pass)
+            elif is_unfinished(node, passes, reeb):
+                new_unfinished.append(node)
+        unfinished = new_unfinished
+        print 'unfinished: %s' % pformat(unfinished)
+        print 'reeb: %s' % pformat(dict(reeb._g))
+        print 'surf network: %s' % pformat(dict(surf._g))
+        res = raw_input('enter to continue, "q" to quit')
+        if res.lower() == 'q':
+            return reeb
+    return reeb
