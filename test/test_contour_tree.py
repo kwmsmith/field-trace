@@ -5,6 +5,8 @@ import contour_tree as ct
 
 from nose.tools import eq_, ok_
 
+from test_critical_point_network import random_periodic_upsample, visualize
+
 class test_contour_tree(object):
 
     def setUp(self):
@@ -78,11 +80,33 @@ class test_contour_tree(object):
             raw_input("enter to continue")
 
     def test_contour_tree(self):
+        join = ct.join_split_tree(self.mesh, self.height_func)
+        split = ct.join_split_tree(self.mesh, self.height_func, join_split_fac=-1.0)
         contour_tree = ct.contour_tree(self.mesh, self.height_func)
-        # import pylab as pl
-        # pl.ion()
-        # nx.draw(contour_tree)
-        # raw_input("enter to continue")
+        crit_pts = ct.critical_points(contour_tree)
+        eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
+        eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
+        eq_(sorted(crit_pts['passes']), sorted([3, 4, 5, 6]))
+
+    def test_arr(self):
+        arr = random_periodic_upsample(256, 4, seed=None)
+        mesh = ct.make_mesh(arr)
+        def height_func(n):
+            return arr[n]
+        contour_tree = ct.contour_tree(mesh, height_func)
+        cpts = ct.critical_points(contour_tree)
+        peaks = cpts['peaks']
+        passes = cpts['passes']
+        pits = cpts['pits']
+        print arr[0,0]
+        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
+        print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
+        if 0:
+            import pylab as pl
+            visualize(arr, crit_pts=cpts, cmap='hot')
+            # nx.draw_shell(contour_tree)
+            raw_input("enter to continue")
+        # pprint(cpts)
 
 mesh_edges = [
         (1, 2.1),

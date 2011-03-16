@@ -75,12 +75,12 @@ def test_critical_points():
     for _ in range(10):
         yield _tester, random_periodic_upsample(32, 8, seed=_), False
 
-def visualize(arr, mesh=None, crit_pts=None, surf_network=None):
+def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None):
     import pylab as pl
     pl.ioff()
     fig = pl.figure()
     # pl.imshow(arr, interpolation='nearest', cmap='jet')
-    pl.imshow(arr, cmap='jet', interpolation='nearest')
+    pl.imshow(arr, cmap=cmap, interpolation='nearest')
     nx, ny = arr.shape
     if mesh is not None:
         for i in range(1, nx-1):

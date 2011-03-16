@@ -1,4 +1,4 @@
-import networkx as nx
+import networkx as _nx
 
 def uf_merge(uf_map, key1, key2):
     s1 = uf_map[key1]
@@ -16,7 +16,7 @@ def uf_merge(uf_map, key1, key2):
         uf_map[key] = updated_set
 
 def join_split_tree(mesh, height_func, join_split_fac=1.0):
-    join_tree = nx.DiGraph()
+    join_tree = _nx.DiGraph()
     # map of nodes to union-find set that it's in
     uf_map = {}
     # map of union-find set id to lowest node in the set.
@@ -76,7 +76,7 @@ def contour_tree(mesh, height_func):
     join.name = 'join'
     split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
     split.name = 'split'
-    c_tree = nx.DiGraph()
+    c_tree = _nx.DiGraph()
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
         leaf = leaves.pop()
@@ -98,3 +98,59 @@ def contour_tree(mesh, height_func):
         if is_leaf(nbr, join, split):
             leaves.append(nbr)
     return c_tree
+
+def critical_points(ctree):
+    crit_pts = {}
+    in_deg = ctree.in_degree()
+    out_deg = ctree.out_degree()
+    crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0])
+    crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0])
+    crit_pts['passes'] = set([n for n in out_deg if out_deg[n] >= 1 and in_deg[n] >= 2] +
+                             [n for n in out_deg if out_deg[n] >= 2 and in_deg[n] >= 1])
+    return crit_pts
+
+AC = 0
+BD = 1
+
+def envelope(a, b, c, d):
+    if b + d >= a + c:
+        return BD
+    else:
+        return AC
+
+def flattest(a, b, c, d):
+    if (d - b)*(d - b) >= (a - c)*(a - c):
+        return AC
+    else:
+        return BD
+
+def connect_diagonal(a, b, c, d):
+    """
+    returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
+    
+    """
+    return flattest(a, b, c, d)
+    # return envelope(a, b, c, d)
+    # return AC
+
+def make_mesh(arr):
+    G = _nx.Graph()
+    nx, ny = arr.shape
+    for i in range(nx):
+        for j in range(ny):
+            # connect along the cardinal directions
+            G.add_edge((i,j), ((i+1)%nx, j))
+            G.add_edge((i,j), ((i-1)%nx, j))
+            G.add_edge((i,j), (i, (j+1)%ny))
+            G.add_edge((i,j), (i, (j-1)%ny))
+            a = arr[i,j]
+            b = arr[i,(j+1)%ny]
+            c = arr[(i+1)%nx, (j+1)%ny]
+            d = arr[(i+1)%nx, j]
+            if connect_diagonal(a, b, c, d) == AC:
+                G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
+            elif connect_diagonal(a, b, c, d) == BD:
+                G.add_edge((i,(j+1)%ny), ((i+1)%nx, j))
+            else:
+                raise RuntimeError("invalid return value from connect_diagonal")
+    return G
