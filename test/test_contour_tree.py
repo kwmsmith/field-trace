@@ -89,7 +89,7 @@ class test_contour_tree(object):
         eq_(sorted(crit_pts['passes']), sorted([3, 4, 5, 6]))
 
     def test_arr(self):
-        arr = random_periodic_upsample(256, 4, seed=None)
+        arr = random_periodic_upsample(128, 4, seed=1)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
@@ -106,7 +106,6 @@ class test_contour_tree(object):
             visualize(arr, crit_pts=cpts, cmap='hot')
             # nx.draw_shell(contour_tree)
             raw_input("enter to continue")
-        # pprint(cpts)
 
 mesh_edges = [
         (1, 2.1),

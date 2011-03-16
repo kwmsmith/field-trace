@@ -31,11 +31,12 @@ def join_split_tree(mesh, height_func, join_split_fac=1.0):
             nbr_h = join_split_fac * height_func(nbr)
             if nbr_h < h or uf_map[nbr] is uf_map[n]:
                 continue
-            # uf_merge() can change the uf_map[nbr] id value. Store it
-            # for later retrieval.
-            uf_map_nbr_id = id(uf_map[nbr])
+            # uf_merge() can change the uf_map[nbr], and hence, the lowest
+            # point in nbr's union-find set. So we add the edge first before doing the
+            # union-find merge.
+            lowest_in_nbr_uf = lowest_node_map[id(uf_map[nbr])]
+            join_tree.add_edge(lowest_in_nbr_uf, n)
             uf_merge(uf_map, n, nbr)
-            join_tree.add_edge(lowest_node_map[uf_map_nbr_id], n)
             lowest_node_map[id(uf_map[nbr])] = n
     return join_tree
 
