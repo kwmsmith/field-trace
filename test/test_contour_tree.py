@@ -18,10 +18,10 @@ class test_contour_tree(object):
         split = ct.join_split_tree(self.mesh, self.height_func, join_split_fac=-1.0)
         eq_(join.order(), split.order())
         eq_(sorted(join.nodes()), sorted(split.nodes()))
-        eq_(sorted(ct.peak_pit_nodes(join)), [7, 8, 9, 10])
-        eq_(sorted(ct.peak_pit_nodes(split)), [1, 2])
-        eq_(sorted(ct.pass_nodes(join)), [4, 5, 6])
-        eq_(sorted(ct.pass_nodes(split)), [3])
+        eq_(sorted(ct.join_split_peak_pit_nodes(join)), [7, 8, 9, 10])
+        eq_(sorted(ct.join_split_peak_pit_nodes(split)), [1, 2])
+        eq_(sorted(ct.join_split_pass_nodes(join)), [4, 5, 6])
+        eq_(sorted(ct.join_split_pass_nodes(split)), [3])
 
         eq_(join.adj,
                 {
@@ -67,7 +67,7 @@ class test_contour_tree(object):
                     9: {10: {}},
                     10: {}})
 
-        if 1:
+        if 0:
             import pylab as pl
             pl.ion()
             nx.draw_shell(join)
@@ -79,10 +79,10 @@ class test_contour_tree(object):
 
     def test_contour_tree(self):
         contour_tree = ct.contour_tree(self.mesh, self.height_func)
-        import pylab as pl
-        pl.ion()
-        nx.draw(contour_tree)
-        raw_input("enter to continue")
+        # import pylab as pl
+        # pl.ion()
+        # nx.draw(contour_tree)
+        # raw_input("enter to continue")
 
 mesh_edges = [
         (1, 2.1),

@@ -35,16 +35,15 @@ def join_split_tree(mesh, height_func, join_split_fac=1.0):
             # for later retrieval.
             uf_map_nbr_id = id(uf_map[nbr])
             uf_merge(uf_map, n, nbr)
-            assert join_split_fac * height_func(lowest_node_map[uf_map_nbr_id]) > h
             join_tree.add_edge(lowest_node_map[uf_map_nbr_id], n)
             lowest_node_map[id(uf_map[nbr])] = n
     return join_tree
 
-def peak_pit_nodes(join):
+def join_split_peak_pit_nodes(join):
     in_deg = join.in_degree()
     return [n for n in in_deg if in_deg[n] == 0]
 
-def pass_nodes(join):
+def join_split_pass_nodes(join):
     in_deg = join.in_degree()
     out_deg = join.out_degree()
     return [n for n in in_deg if in_deg[n] >= 2 and out_deg[n] == 1]
@@ -61,10 +60,6 @@ def is_lower_leaf(leaf, join, split):
 def reduce_graph(graph, node):
     preds = graph.predecessors(node)
     succs = graph.successors(node)
-    if len(preds) not in (0, 1):
-        import pdb; pdb.set_trace()
-    if len(succs) not in (0, 1):
-        import pdb; pdb.set_trace()
     if preds:
         assert len(preds) == 1
         if succs:
@@ -81,8 +76,8 @@ def contour_tree(mesh, height_func):
     join.name = 'join'
     split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
     split.name = 'split'
-    c_tree = nx.Graph()
-    leaves = peak_pit_nodes(join) + peak_pit_nodes(split)
+    c_tree = nx.DiGraph()
+    leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
         leaf = leaves.pop()
         if is_upper_leaf(leaf, join, split):
@@ -94,7 +89,10 @@ def contour_tree(mesh, height_func):
         this_succ = this.successors(leaf)
         assert len(this_succ) == 1
         nbr = this_succ[0]
-        c_tree.add_edge(leaf, nbr)
+        if height_func(leaf) > height_func(nbr):
+            c_tree.add_edge(leaf, nbr)
+        else:
+            c_tree.add_edge(nbr, leaf)
         reduce_graph(this, leaf)
         reduce_graph(other, leaf)
         if is_leaf(nbr, join, split):
