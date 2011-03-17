@@ -1,5 +1,7 @@
 import networkx as _nx
 
+from collections import defaultdict
+
 def uf_merge(uf_map, key1, key2):
     s1 = uf_map[key1]
     s2 = uf_map[key2]
@@ -14,6 +16,88 @@ def uf_merge(uf_map, key1, key2):
     uf_map[key1] = uf_map[key2] = updated_set
     for key in keys_to_change:
         uf_map[key] = updated_set
+
+def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
+    join_tree = _nx.DiGraph()
+    # map of nodes to union-find set that it's in
+    uf_map = {}
+    # map from supernodes in the sparse j/s tree to all regular nodes in
+    # supernode's arc.
+    # supernode_arc = defaultdict(set)
+    supernode_arc = {}
+    # map of union-find set id to node to connect to in set.  When a join node
+    # is created in the join_tree, connection_node_map keeps track of which
+    # node should be connected in the join_tree.
+    supernode_map = {}
+    # a list of (height, node) tuples
+    # XXX: store height_func() results in mesh?
+    height_and_nodes = [(join_split_fac * height_func(node), node) for node in mesh.nodes()]
+    height_and_nodes.sort(reverse=True)
+    for h, n in height_and_nodes:
+        # supernode_arc[n] = set([n])
+        uf_map[n] = set([n])
+        supernode_map[id(uf_map[n])] = n
+        connect_nbrs = []
+        edges = []
+        for nbr in mesh.neighbors_iter(n):
+            # XXX: remove call to height_func()
+            nbr_h = join_split_fac * height_func(nbr)
+            if nbr_h < h or uf_map[nbr] is uf_map[n]:
+                continue
+            connection_nbr_uf = supernode_map[id(uf_map[nbr])]
+            edges.append((connection_nbr_uf, n))
+            connect_nbrs.append(nbr)
+            uf_merge(uf_map, n, nbr)
+        if len(edges) == 1:
+            snode = supernode_map[id(uf_map[n])]
+            supernode_arc[n] = snode
+        elif len(edges) > 1:
+            join_tree.add_edges_from(edges)
+            for nbr in connect_nbrs:
+                supernode_map[id(uf_map[nbr])] = n
+    # add all the supernodes in the join_tree to the supernode_arcs.
+    # do this before adding the global minimum.
+    for node in join_tree:
+        supernode_arc[node] = node
+    # connect the global minimum to the join_tree's bottom
+    tree_bottom = [n for (n,d) in join_tree.out_degree().items() if d == 0][0]
+    global_min = height_and_nodes[-1][1]
+    join_tree.add_edge(tree_bottom, global_min)
+    return join_tree, supernode_arc
+
+def splice_in_node(gr, start, newnode):
+    succs = gr.successors(start)
+    gr.add_edge(start, newnode)
+    if succs:
+        if len(succs) != 1:
+            import pdb; pdb.set_trace()
+        succ = succs[0]
+        gr.add_edge(newnode, succ)
+        gr.remove_edge(start, succ)
+
+# def get_regions(join, jnode2arc, split, snode2arc, height_func):
+    # jarc2node = defaultdict(list)
+    # sarc2node = defaultdict(list)
+    # for node, arc in jnode2arc.items():
+        # jarc2node[arc].append(node)
+    # for node, arc in snode2arc.items():
+        # sarc2node[arc].append(node)
+    # for arc in jarc2node:
+        # assert arc in snode2arc
+        # join_max_node = jarc2node[arc]
+        # join_min_node = join.successors(join_max_node)[0]
+
+def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
+    join_nodes = set(join.nodes())
+    split_nodes = set(split.nodes())
+    if join_nodes == split_nodes:
+        return
+    join_to_add = sorted(join_nodes.difference(split_nodes), key=height_func, reverse=True)
+    split_to_add = sorted(split_nodes.difference(join_nodes), key=height_func)
+    for jn in join_to_add:
+        splice_in_node(split, sarcs[jn], jn)
+    for sn in split_to_add:
+        splice_in_node(join, jarcs[sn], sn)
 
 def join_split_tree(mesh, height_func, join_split_fac=1.0):
     join_tree = _nx.DiGraph()
@@ -72,11 +156,14 @@ def reduce_graph(graph, node):
         graph.remove_edge(node, succs[0])
     graph.remove_node(node)
 
-def contour_tree(mesh, height_func):
-    join = join_split_tree(mesh, height_func, join_split_fac=1.0)
-    join.name = 'join'
-    split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
-    split.name = 'split'
+def contour_tree(mesh, height_func, sparse=False):
+    if sparse:
+        join, jarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=1.0)
+        split, sarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=-1.0)
+        rectify_join_split_trees(join, jarcs, split, sarcs, height_func)
+    else:
+        join = join_split_tree(mesh, height_func, join_split_fac=1.0)
+        split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
     c_tree = _nx.DiGraph()
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
@@ -99,6 +186,24 @@ def contour_tree(mesh, height_func):
         if is_leaf(nbr, join, split):
             leaves.append(nbr)
     return c_tree
+
+def get_superarcs(mesh, sparse_contour_tree, height_func):
+    raise NotImplementedError("finish me!!!")
+    sarcs = {}
+    for snode in sparse_contour_tree:
+        succs = sparse_contour_tree.successors(snode)
+        if not succs:
+            continue
+        assert len(succs) == 1
+        succ = succs[0]
+        max_h = height_func(snode)
+        min_h = height_func(succ)
+        unvisited = [snode]
+        sarcs[snode] = set([snode])
+        # while True:
+            # node = unvisited.pop()
+            # for nbr in mesh.neighbors_iter()
+
 
 def critical_points(ctree):
     crit_pts = {}
