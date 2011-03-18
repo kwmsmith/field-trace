@@ -86,7 +86,7 @@ class test_contour_tree(object):
                     })
 
     def test_arr(self):
-        arr = random_periodic_upsample(64, 4, seed=2)
+        arr = random_periodic_upsample(64, 8, seed=None)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
@@ -98,10 +98,20 @@ class test_contour_tree(object):
         print arr[0,0]
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        if 0:
+        if 1:
+            ncontours = 30
             import pylab as pl
-            visualize(arr, crit_pts=cpts, cmap='hot')
-            raw_input("enter to continue")
+            # visualize(arr, crit_pts=cpts, cmap='gray', ncontours=ncontours, surf_network=contour_tree.to_undirected())
+            # visualize(arr, crit_pts=cpts, cmap='gray', ncontours=ncontours, surf_network=None)
+            # visualize(arr, cmap='gray', ncontours=ncontours)
+            filled_arr = arr.copy()
+            for region in sorted(regions, key=height_func, reverse=True):
+                # filled_arr = arr.copy()
+                X = [_[0] for _ in regions[region]]
+                Y = [_[1] for _ in regions[region]]
+                filled_arr[X,Y] = 2*arr.max()
+                visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
+                raw_input("enter to continue")
 
 mesh_edges = [
         (1, 2.1),

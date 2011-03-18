@@ -75,12 +75,15 @@ def test_critical_points():
     for _ in range(10):
         yield _tester, random_periodic_upsample(32, 8, seed=_), False
 
-def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None):
+def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None, ncontours=None, new_fig=True):
     import pylab as pl
     pl.ioff()
-    fig = pl.figure()
+    if new_fig:
+        fig = pl.figure()
     # pl.imshow(arr, interpolation='nearest', cmap='jet')
     pl.imshow(arr, cmap=cmap, interpolation='nearest')
+    if ncontours is not None:
+        pl.contour(arr, ncontours, linewidths=2, cmap=pl.cm.hot)
     nx, ny = arr.shape
     if mesh is not None:
         for i in range(1, nx-1):
@@ -89,9 +92,9 @@ def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None):
                 for x,y in other_pts:
                     pl.plot([j,y], [i,x], 'k--')
     if surf_network is not None:
-        for node in surf_network._g:
+        for node in surf_network:
             node_x, node_y = node
-            nbrs = surf_network._g[node]
+            nbrs = surf_network[node]
             for nbr in nbrs:
                 nbr_x, nbr_y = nbr
                 pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--')
@@ -107,7 +110,10 @@ def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None):
         Y = [_[1] for _ in passes]
         pl.scatter(Y, X, marker='d', c='k', s=50)
     pl.ion()
-    pl.figure(fig.number)
+    if new_fig:
+        pl.figure(fig.number)
+    else:
+        pl.figure(pl.gcf().number)
 
 def compare_graphs(g1, g2):
     g1_unordered = dict((k, set(v)) for (k, v) in g1.items())

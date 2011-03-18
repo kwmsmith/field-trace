@@ -23,7 +23,6 @@ def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
     uf_map = {}
     # map from supernodes in the sparse j/s tree to all regular nodes in
     # supernode's arc.
-    # supernode_arc = defaultdict(set)
     supernode_arc = {}
     # map of union-find set id to node to connect to in set.  When a join node
     # is created in the join_tree, connection_node_map keeps track of which
@@ -244,9 +243,9 @@ def connect_diagonal(a, b, c, d):
     returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
     
     """
-    return flattest(a, b, c, d)
+    # return flattest(a, b, c, d)
     # return envelope(a, b, c, d)
-    # return AC
+    return AC
 
 def make_mesh(arr):
     G = _nx.Graph()
