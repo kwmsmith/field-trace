@@ -55,7 +55,7 @@ class test_contour_tree(object):
         eq_(set(split_arcs.keys()), set(self.mesh.nodes()))
         ct.rectify_join_split_trees(join, join_arcs, split, split_arcs, self.height_func)
         eq_(sorted(join.nodes()), sorted(split.nodes()))
-        contour_tree = ct.contour_tree(self.mesh, self.height_func, sparse=True)
+        contour_tree, regions = ct.contour_tree(self.mesh, self.height_func, sparse=True)
         crit_pts = ct.critical_points(contour_tree)
         eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
         eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
@@ -71,14 +71,27 @@ class test_contour_tree(object):
             pl.figure()
             nx.draw(contour_tree)
             raw_input("enter to continue")
-
+        eq_(regions,
+                {
+                    1: [1, 2.1],
+                    2: [2],
+                    3: [3],
+                    4: [4],
+                    5: [5, 4.6],
+                    6: [6, 4.9],
+                    7: [7],
+                    8: [8, 6.9],
+                    9: [9, 6.5],
+                    10: [10, 8.3, 7.2, 6.1],
+                    })
 
     def test_arr(self):
-        arr = random_periodic_upsample(256, 4, seed=1)
+        arr = random_periodic_upsample(64, 4, seed=2)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
-        contour_tree = ct.contour_tree(mesh, height_func, sparse=True)
+        contour_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
+        # import pdb; pdb.set_trace()
         cpts = ct.critical_points(contour_tree)
         peaks = cpts['peaks']
         passes = cpts['passes']
@@ -86,7 +99,7 @@ class test_contour_tree(object):
         print arr[0,0]
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        if 0:
+        if 1:
             import pylab as pl
             visualize(arr, crit_pts=cpts, cmap='hot')
             # nx.draw_shell(contour_tree)

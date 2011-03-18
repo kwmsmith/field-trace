@@ -75,17 +75,41 @@ def splice_in_node(gr, start, newnode):
         gr.add_edge(newnode, succ)
         gr.remove_edge(start, succ)
 
-# def get_regions(join, jnode2arc, split, snode2arc, height_func):
-    # jarc2node = defaultdict(list)
-    # sarc2node = defaultdict(list)
-    # for node, arc in jnode2arc.items():
-        # jarc2node[arc].append(node)
-    # for node, arc in snode2arc.items():
-        # sarc2node[arc].append(node)
-    # for arc in jarc2node:
-        # assert arc in snode2arc
-        # join_max_node = jarc2node[arc]
-        # join_min_node = join.successors(join_max_node)[0]
+def get_regions(contour_tree, jnode2super, snode2super, height_func):
+    jsuper2nodes = defaultdict(list)
+    ssuper2nodes = defaultdict(list)
+    for node in sorted(jnode2super, key=height_func, reverse=True):
+        supern = jnode2super[node]
+        jsuper2nodes[supern].append(node)
+    for node in sorted(snode2super, key=height_func):
+        supern = snode2super[node]
+        ssuper2nodes[supern].append(node)
+    regions = {}
+    for super_node in contour_tree:
+        if super_node in jsuper2nodes:
+            succ = contour_tree.successors(super_node)
+            if len(succ) != 1:
+                continue
+            upper_h = height_func(super_node)
+            lower_h = height_func(succ[0])
+            reg = jsuper2nodes[super_node]
+            if lower_h < height_func(reg[-1]):
+                idx = len(reg)
+            else:
+                idx = reg.index(succ[0])
+        elif super_node in ssuper2nodes:
+            pred = contour_tree.predecessors(super_node)
+            if len(pred) != 1:
+                continue
+            lower_h = height_func(super_node)
+            upper_h = height_func(pred[0])
+            reg = ssuper2nodes[super_node]
+            if upper_h > height_func(reg[-1]):
+                idx = len(reg)
+            else:
+                idx = reg.index(pred[0])
+        regions[super_node] = reg[:idx]
+    return regions
 
 def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
     join_nodes = set(join.nodes())
@@ -185,25 +209,11 @@ def contour_tree(mesh, height_func, sparse=False):
         reduce_graph(other, leaf)
         if is_leaf(nbr, join, split):
             leaves.append(nbr)
-    return c_tree
-
-def get_superarcs(mesh, sparse_contour_tree, height_func):
-    raise NotImplementedError("finish me!!!")
-    sarcs = {}
-    for snode in sparse_contour_tree:
-        succs = sparse_contour_tree.successors(snode)
-        if not succs:
-            continue
-        assert len(succs) == 1
-        succ = succs[0]
-        max_h = height_func(snode)
-        min_h = height_func(succ)
-        unvisited = [snode]
-        sarcs[snode] = set([snode])
-        # while True:
-            # node = unvisited.pop()
-            # for nbr in mesh.neighbors_iter()
-
+    if sparse:
+        return c_tree, get_regions(c_tree, jarcs, sarcs, height_func)
+        # return c_tree, {}
+    else:
+        return c_tree
 
 def critical_points(ctree):
     crit_pts = {}
