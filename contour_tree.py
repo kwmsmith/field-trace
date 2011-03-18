@@ -211,7 +211,6 @@ def contour_tree(mesh, height_func, sparse=False):
             leaves.append(nbr)
     if sparse:
         return c_tree, get_regions(c_tree, jarcs, sarcs, height_func)
-        # return c_tree, {}
     else:
         return c_tree
 

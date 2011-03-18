@@ -91,7 +91,6 @@ class test_contour_tree(object):
         def height_func(n):
             return arr[n]
         contour_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
-        # import pdb; pdb.set_trace()
         cpts = ct.critical_points(contour_tree)
         peaks = cpts['peaks']
         passes = cpts['passes']
@@ -99,10 +98,9 @@ class test_contour_tree(object):
         print arr[0,0]
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        if 1:
+        if 0:
             import pylab as pl
             visualize(arr, crit_pts=cpts, cmap='hot')
-            # nx.draw_shell(contour_tree)
             raw_input("enter to continue")
 
 mesh_edges = [
