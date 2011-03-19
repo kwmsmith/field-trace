@@ -1,10 +1,13 @@
 from kaw_analysis import test_vcalc as tv
-from wrap_gsl_interp2d import Interp2DPeriodic
+# from wrap_gsl_interp2d import Interp2DPeriodic
 
 import field_trace
+import contour_tree as ct
 
 import numpy as np
 from itertools import izip
+
+from test_critical_point_network import random_periodic_upsample, visualize
 
 import pylab as pl
 pl.ion()
@@ -255,4 +258,35 @@ def save_figs():
         # ctr += 1
         break
 
-save_figs()
+# save_figs()
+
+def test_contour_tree():
+    for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
+                                h5_gen('data.h5', 'by'),
+                                h5_gen('data.h5', 'psi')):
+        bx = bx.read()
+        by = by.read()
+        arr = psi_arr.read()
+        def height_func(n):
+            return arr[n]
+        mesh = ct.make_mesh(arr)
+        c_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
+        cpts = ct.critical_points(c_tree)
+        peaks = cpts['peaks']
+        passes = cpts['passes']
+        pits = cpts['pits']
+        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
+        print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
+        if 1:
+            ncontours = 30
+            import pylab as pl
+            filled_arr = arr.copy()
+            def hf((a,b)): return height_func(a), height_func(b)
+            for region in sorted(regions, key=hf, reverse=True):
+                X = [_[0] for _ in regions[region]]
+                Y = [_[1] for _ in regions[region]]
+                filled_arr[X,Y] = 2*arr.max()
+            visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
+            raw_input("enter to continue")
+
+test_contour_tree()

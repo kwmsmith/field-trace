@@ -73,24 +73,27 @@ class test_contour_tree(object):
             raw_input("enter to continue")
         eq_(regions,
                 {
-                    1: [1, 2.1],
-                    2: [2],
-                    3: [3],
-                    4: [4],
-                    5: [5, 4.6],
-                    6: [6, 4.9],
-                    7: [7],
-                    8: [8, 6.9],
-                    9: [9, 6.5],
-                    10: [10, 8.3, 7.2, 6.1],
+                    (6, 4): [4.9, 6],
+                    (3, 2): [2],
+                    (7, 6): [7],
+                    (3, 1): [1, 2.1],
+                    (5, 4): [4.6, 5],
+                    (10, 5): [6.1, 7.2, 8.3, 10],
+                    (4, 3): [3, 4],
+                    (9, 5): [6.5, 9],
+                    (8, 6): [6.9, 8],
                     })
 
     def test_arr(self):
-        arr = random_periodic_upsample(64, 8, seed=None)
+        arr = random_periodic_upsample(32, 4, seed=1)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
         contour_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
+        pts_covered = set()
+        for reg in regions.values():
+            pts_covered.update(reg)
+        print "num points: %d num points covered: %d" % (arr.size, len(pts_covered))
         cpts = ct.critical_points(contour_tree)
         peaks = cpts['peaks']
         passes = cpts['passes']
@@ -105,7 +108,8 @@ class test_contour_tree(object):
             # visualize(arr, crit_pts=cpts, cmap='gray', ncontours=ncontours, surf_network=None)
             # visualize(arr, cmap='gray', ncontours=ncontours)
             filled_arr = arr.copy()
-            for region in sorted(regions, key=height_func, reverse=True):
+            def hf((a,b)): return height_func(a), height_func(b)
+            for region in sorted(regions, key=hf, reverse=True):
                 # filled_arr = arr.copy()
                 X = [_[0] for _ in regions[region]]
                 Y = [_[1] for _ in regions[region]]

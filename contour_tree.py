@@ -41,7 +41,9 @@ def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
         for nbr in mesh.neighbors_iter(n):
             # XXX: remove call to height_func()
             nbr_h = join_split_fac * height_func(nbr)
-            if nbr_h < h or uf_map[nbr] is uf_map[n]:
+            if nbr_h == h:
+                print "nbr_h == h"
+            if nbr_h <= h or uf_map[nbr] is uf_map[n]:
                 continue
             connection_nbr_uf = supernode_map[id(uf_map[nbr])]
             edges.append((connection_nbr_uf, n))
@@ -77,37 +79,44 @@ def splice_in_node(gr, start, newnode):
 def get_regions(contour_tree, jnode2super, snode2super, height_func):
     jsuper2nodes = defaultdict(list)
     ssuper2nodes = defaultdict(list)
-    for node in sorted(jnode2super, key=height_func, reverse=True):
+    # for node in sorted(jnode2super, key=height_func, reverse=True):
+    for node in sorted(jnode2super, key=height_func):
         supern = jnode2super[node]
         jsuper2nodes[supern].append(node)
     for node in sorted(snode2super, key=height_func):
         supern = snode2super[node]
         ssuper2nodes[supern].append(node)
     regions = {}
-    for super_node in contour_tree:
-        if super_node in jsuper2nodes:
-            succ = contour_tree.successors(super_node)
-            if len(succ) != 1:
-                continue
-            upper_h = height_func(super_node)
-            lower_h = height_func(succ[0])
-            reg = jsuper2nodes[super_node]
-            if lower_h < height_func(reg[-1]):
-                idx = len(reg)
-            else:
-                idx = reg.index(succ[0])
-        elif super_node in ssuper2nodes:
-            pred = contour_tree.predecessors(super_node)
-            if len(pred) != 1:
-                continue
-            lower_h = height_func(super_node)
-            upper_h = height_func(pred[0])
-            reg = ssuper2nodes[super_node]
-            if upper_h > height_func(reg[-1]):
-                idx = len(reg)
-            else:
-                idx = reg.index(pred[0])
-        regions[super_node] = reg[:idx]
+    for higher_node in contour_tree:
+        lower_nodes = contour_tree.successors(higher_node)
+        for lower_node in lower_nodes:
+            if higher_node in jsuper2nodes and lower_node in jsuper2nodes:
+                # all info is in the jsuper2nodes map.
+                region = jsuper2nodes[higher_node]
+            elif higher_node in ssuper2nodes and lower_node in ssuper2nodes:
+                # all info in ssuper2nodes map.
+                region = ssuper2nodes[lower_node]
+            elif higher_node in jsuper2nodes and lower_node in ssuper2nodes:
+                # region is just the tail part of jsuper2nodes[higher_node]
+                region = jsuper2nodes[higher_node]
+                lower_h = height_func(lower_node)
+                try:
+                    idx = region.index(lower_node)
+                except ValueError:
+                    assert lower_h < height_func(region[0])
+                    idx = 0
+                region = region[idx:]
+            elif higher_node in ssuper2nodes and lower_node in jsuper2nodes:
+                # the complicated case...
+                # find higher_node's superarc in jsuper2nodes
+                hsuper = jnode2super[higher_node]
+                hsuperarc = jsuper2nodes[hsuper]
+                # and lower_node's superarc in ssuper2nodes
+                lsuper = snode2super[lower_node]
+                lsuperarc = ssuper2nodes[lsuper]
+                # the region is the intersection between hsuprearc and lsuperarc
+                region = sorted(set(hsuperarc).intersection(lsuperarc), key=height_func, reverse=True)
+            regions[higher_node, lower_node] = region
     return regions
 
 def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
@@ -243,9 +252,9 @@ def connect_diagonal(a, b, c, d):
     returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
     
     """
-    # return flattest(a, b, c, d)
+    return flattest(a, b, c, d)
     # return envelope(a, b, c, d)
-    return AC
+    # return AC
 
 def make_mesh(arr):
     G = _nx.Graph()
