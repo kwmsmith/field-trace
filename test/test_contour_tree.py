@@ -10,7 +10,7 @@ from test_critical_point_network import random_periodic_upsample, visualize
 class test_contour_tree(object):
 
     def setUp(self):
-        self.mesh = nx.Graph()
+        self.mesh = ct.Graph()
         self.mesh.add_edges_from(mesh_edges)
         self.height_func = lambda n: n
 
@@ -25,17 +25,18 @@ class test_contour_tree(object):
         eq_(sorted(ct.join_split_pass_nodes(join)), [4, 5, 6])
         eq_(sorted(ct.join_split_pass_nodes(split)), [3])
 
-        eq_(join.adj, join_adj)
-
-        eq_(split.adj, split_adj)
+        compare_adj(join.adj, join_adj)
+        compare_adj(split.adj, split_adj)
 
         if 0:
             import pylab as pl
             pl.ion()
-            nx.draw_shell(join)
+            nx_join = join.to_nx()
+            nx.draw_shell(nx_join)
             pl.title('join')
             pl.figure()
-            nx.draw_shell(split)
+            nx_split = split.to_nx()
+            nx.draw_shell(nx_split)
             pl.title('split')
             raw_input("enter to continue")
 
@@ -63,13 +64,16 @@ class test_contour_tree(object):
         if 0:
             import pylab as pl
             pl.ion()
-            nx.draw(join)
+            nx_join = join.to_nx()
+            nx.draw(nx_join)
             pl.title('join')
             pl.figure()
-            nx.draw(split)
+            nx_split = split.to_nx()
+            nx.draw(nx_split)
             pl.title('split')
             pl.figure()
-            nx.draw(contour_tree)
+            nx_ctree = contour_tree.to_nx()
+            nx.draw(nx_ctree)
             raw_input("enter to continue")
         eq_(regions,
                 {
@@ -85,7 +89,7 @@ class test_contour_tree(object):
                     })
 
     def test_arr_full(self):
-        arr = random_periodic_upsample(32, 4, seed=None)
+        arr = random_periodic_upsample(256, 4, seed=1)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
@@ -99,7 +103,6 @@ class test_contour_tree(object):
         print 'tot points covered: %d' % len(contour_tree)
         eq_(len(set(contour_tree)), arr.size)
         regions = ct.get_regions_full(contour_tree)
-        set_trace()
         if 0:
             vis(arr, height_func=height_func, crit_pts=cpts, regions=regions, step=False)
 
@@ -198,43 +201,48 @@ mesh_edges = [
         (8.3, 10),
     ]
 
+def compare_adj(adj1, adj2):
+    for x in adj1:
+        eq_(set(adj1[x]), set(adj2[x]))
+
 join_adj = {
-        1: {},
-        2: {1: {}},
-        2.1: {2: {}},
-        3: {2.1: {}},
-        4: {3: {}},
-        4.6: {4: {}},
-        4.9: {4: {}},
-        5: {4.6: {}},
-        6: {4.9: {}},
-        6.1: {5: {}},
-        6.5: {5: {}},
-        6.9: {6: {}},
-        7: {6: {}},
-        7.2: {6.1: {}},
-        8: {6.9: {}},
-        8.3: {7.2: {}},
-        9: {6.5: {}},
-        10: {8.3: {}},
+        1: set([]),
+        2: set([1]),
+        2.1: set([2]),
+        3: set([2.1]),
+        4: set([3]),
+        4.6: set([4]),
+        4.9: set([4]),
+        5: set([4.6]),
+        6: set([4.9]),
+        6.1: set([5]),
+        6.5: set([5]),
+        6.9: set([6]),
+        7: set([6]),
+        7.2: set([6.1]),
+        8: set([6.9]),
+        8.3: set([7.2]),
+        9: set([6.5]),
+        10: set([8.3]),
         }
 
 split_adj = {
-        1: {2.1: {}},
-        2: {3: {}},
-        2.1: {3: {}},
-        3: {4: {}},
-        4: {4.6: {}},
-        4.6: {4.9: {}},
-        4.9: {5: {}},
-        5: {6: {}},
-        6: {6.1: {}},
-        6.1: {6.5: {}},
-        6.5: {6.9: {}},
-        6.9: {7: {}},
-        7: {7.2: {}},
-        7.2: {8: {}},
-        8: {8.3: {}},
-        8.3: {9: {}},
-        9: {10: {}},
-        10: {}}
+    1: set([2.1]),
+    2: set([3]),
+    2.1: set([3]),
+    3: set([4]),
+    4: set([4.6]),
+    4.6: set([4.9]),
+    4.9: set([5]),
+    5: set([6]),
+    6: set([6.1]),
+    6.1: set([6.5]),
+    6.5: set([6.9]),
+    6.9: set([7]),
+    7: set([7.2]),
+    7.2: set([8]),
+    8: set([8.3]),
+    8.3: set([9]),
+    9: set([10]),
+    10: set([]),
+    }

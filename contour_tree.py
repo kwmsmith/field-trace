@@ -1,6 +1,7 @@
-import networkx as _nx
-
 from collections import defaultdict
+
+# from graph import Graph, DiGraph
+from networkx import Graph, DiGraph
 
 def uf_merge(uf_map, key1, key2):
     s1 = uf_map[key1]
@@ -18,7 +19,7 @@ def uf_merge(uf_map, key1, key2):
         uf_map[key] = updated_set
 
 def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
-    join_tree = _nx.DiGraph()
+    join_tree = DiGraph()
     # map of nodes to union-find set that it's in
     uf_map = {}
     # map from supernodes in the sparse j/s tree to all regular nodes in
@@ -58,7 +59,7 @@ def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
                 supernode_map[id(uf_map[nbr])] = n
     # add all the supernodes in the join_tree to the supernode_arcs.
     # do this before adding the global minimum.
-    for node in join_tree:
+    for node in join_tree.nodes():
         supernode_arc[node] = node
     # connect the global minimum to the join_tree's bottom
     tree_bottom = [n for (n,d) in join_tree.out_degree().items() if d == 0][0]
@@ -150,7 +151,7 @@ def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
         splice_in_node(join, jarcs[sn], sn)
 
 def join_split_tree(mesh, height_func, join_split_fac=1.0):
-    join_tree = _nx.DiGraph()
+    join_tree = DiGraph()
     # map of nodes to union-find set that it's in
     uf_map = {}
     # map of union-find set id to lowest node in the set.
@@ -207,7 +208,7 @@ def reduce_graph(graph, node):
     graph.remove_node(node)
 
 def contour_tree_from_join_split(join, split, height_func):
-    c_tree = _nx.DiGraph()
+    c_tree = DiGraph()
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
         leaf = leaves.pop()
@@ -277,7 +278,7 @@ def connect_diagonal(a, b, c, d):
     # return AC
 
 def make_mesh(arr):
-    G = _nx.Graph()
+    G = Graph()
     nx, ny = arr.shape
     for i in range(nx):
         for j in range(ny):
