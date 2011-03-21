@@ -76,10 +76,28 @@ def splice_in_node(gr, start, newnode):
         gr.add_edge(newnode, succ)
         gr.remove_edge(start, succ)
 
-def get_regions(contour_tree, jnode2super, snode2super, height_func):
+def get_regions_full(contour_tree):
+    cpts = critical_points(contour_tree)
+    peaks = cpts['peaks']
+    pits = cpts['pits']
+    passes = cpts['passes']
+    cpts_flat = set(peaks.union(pits).union(passes))
+    regions = {}
+    for cpt in cpts_flat:
+        region = [cpt]
+        for lower_nbr in contour_tree.successors_iter(cpt):
+            cur = lower_nbr
+            while cur not in cpts_flat:
+                region.append(cur)
+                cur = contour_tree.successors(cur)[0]
+            # add the last point
+            region.append(cur)
+            regions[(cpt, lower_nbr)] = region
+    return regions
+
+def get_regions_sparse(contour_tree, jnode2super, snode2super, height_func):
     jsuper2nodes = defaultdict(list)
     ssuper2nodes = defaultdict(list)
-    # for node in sorted(jnode2super, key=height_func, reverse=True):
     for node in sorted(jnode2super, key=height_func):
         supern = jnode2super[node]
         jsuper2nodes[supern].append(node)
@@ -168,11 +186,11 @@ def join_split_pass_nodes(join):
 def is_leaf(node, join, split):
     return is_upper_leaf(node, join, split) or is_lower_leaf(node, join, split)
 
-def is_upper_leaf(leaf, join, split):
-    return not join.in_degree(leaf) and split.in_degree(leaf) == 1
+def is_upper_leaf(node, join, split):
+    return not join.in_degree(node) and split.in_degree(node) == 1
 
-def is_lower_leaf(leaf, join, split):
-    return not split.in_degree(leaf) and join.in_degree(leaf) == 1
+def is_lower_leaf(node, join, split):
+    return not split.in_degree(node) and join.in_degree(node) == 1
 
 def reduce_graph(graph, node):
     preds = graph.predecessors(node)
@@ -188,14 +206,7 @@ def reduce_graph(graph, node):
         graph.remove_edge(node, succs[0])
     graph.remove_node(node)
 
-def contour_tree(mesh, height_func, sparse=False):
-    if sparse:
-        join, jarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=1.0)
-        split, sarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=-1.0)
-        rectify_join_split_trees(join, jarcs, split, sarcs, height_func)
-    else:
-        join = join_split_tree(mesh, height_func, join_split_fac=1.0)
-        split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
+def contour_tree_from_join_split(join, split, height_func):
     c_tree = _nx.DiGraph()
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
@@ -217,10 +228,19 @@ def contour_tree(mesh, height_func, sparse=False):
         reduce_graph(other, leaf)
         if is_leaf(nbr, join, split):
             leaves.append(nbr)
-    if sparse:
-        return c_tree, get_regions(c_tree, jarcs, sarcs, height_func)
-    else:
-        return c_tree
+    return c_tree
+
+def sparse_contour_tree(mesh, height_func):
+    join, jarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=1.0)
+    split, sarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=-1.0)
+    rectify_join_split_trees(join, jarcs, split, sarcs, height_func)
+    c_tree = contour_tree_from_join_split(join, split, height_func)
+    return c_tree, get_regions_sparse(c_tree, jarcs, sarcs, height_func)
+
+def contour_tree(mesh, height_func):
+    join = join_split_tree(mesh, height_func, join_split_fac=1.0)
+    split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
+    return contour_tree_from_join_split(join, split, height_func)
 
 def critical_points(ctree):
     crit_pts = {}

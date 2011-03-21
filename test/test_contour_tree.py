@@ -55,7 +55,7 @@ class test_contour_tree(object):
         eq_(set(split_arcs.keys()), set(self.mesh.nodes()))
         ct.rectify_join_split_trees(join, join_arcs, split, split_arcs, self.height_func)
         eq_(sorted(join.nodes()), sorted(split.nodes()))
-        contour_tree, regions = ct.contour_tree(self.mesh, self.height_func, sparse=True)
+        contour_tree, regions = ct.sparse_contour_tree(self.mesh, self.height_func)
         crit_pts = ct.critical_points(contour_tree)
         eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
         eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
@@ -84,12 +84,31 @@ class test_contour_tree(object):
                     (8, 6): [6.9, 8],
                     })
 
-    def test_arr(self):
-        arr = random_periodic_upsample(32, 4, seed=1)
+    def test_arr_full(self):
+        arr = random_periodic_upsample(32, 4, seed=None)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return arr[n]
-        contour_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
+        contour_tree = ct.contour_tree(mesh, height_func)
+        cpts = ct.critical_points(contour_tree)
+        peaks = cpts['peaks']
+        passes = cpts['passes']
+        pits = cpts['pits']
+        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
+        print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
+        print 'tot points covered: %d' % len(contour_tree)
+        eq_(len(set(contour_tree)), arr.size)
+        regions = ct.get_regions_full(contour_tree)
+        set_trace()
+        if 0:
+            vis(arr, height_func=height_func, crit_pts=cpts, regions=regions, step=False)
+
+    def test_arr_sparse(self):
+        arr = random_periodic_upsample(128, 4, seed=1)
+        mesh = ct.make_mesh(arr)
+        def height_func(n):
+            return arr[n]
+        contour_tree, regions = ct.sparse_contour_tree(mesh, height_func)
         pts_covered = set()
         for reg in regions.values():
             pts_covered.update(reg)
@@ -101,21 +120,25 @@ class test_contour_tree(object):
         print arr[0,0]
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        if 1:
-            ncontours = 30
-            import pylab as pl
-            # visualize(arr, crit_pts=cpts, cmap='gray', ncontours=ncontours, surf_network=contour_tree.to_undirected())
-            # visualize(arr, crit_pts=cpts, cmap='gray', ncontours=ncontours, surf_network=None)
-            # visualize(arr, cmap='gray', ncontours=ncontours)
-            filled_arr = arr.copy()
-            def hf((a,b)): return height_func(a), height_func(b)
-            for region in sorted(regions, key=hf, reverse=True):
-                # filled_arr = arr.copy()
-                X = [_[0] for _ in regions[region]]
-                Y = [_[1] for _ in regions[region]]
-                filled_arr[X,Y] = 2*arr.max()
-                visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
-                raw_input("enter to continue")
+        if 0:
+            vis(arr, height_func, regions)
+
+def vis(arr, height_func, crit_pts, regions, step=True, new_fig=False):
+    import pylab as pl
+    filled_arr = arr.copy()
+    def hf((a,b)): return height_func(a), height_func(b)
+    for region in sorted(regions, key=hf, reverse=True):
+        # filled_arr = arr.copy()
+        X = [_[0] for _ in regions[region]]
+        Y = [_[1] for _ in regions[region]]
+        filled_arr[X,Y] = 2*arr.max()
+        if step:
+            visualize(filled_arr, crit_pts=crit_pts, ncontours=None, cmap='gray', new_fig=new_fig)
+            raw_input("enter to continue")
+    if not step:
+        visualize(filled_arr, crit_pts=crit_pts, ncontours=None, cmap='gray', new_fig=True)
+        raw_input("enter to continue")
+
 
 mesh_edges = [
         (1, 2.1),
