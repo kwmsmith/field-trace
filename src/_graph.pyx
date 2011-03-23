@@ -1,3 +1,4 @@
+# cython: profile=True
 from collections import defaultdict
 
 # successors -- check

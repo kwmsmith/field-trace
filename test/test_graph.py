@@ -1,12 +1,12 @@
 import networkx as nx
 
-import graph as gr
+import _graph as gr
 
 from random import randrange, shuffle
 
 from nose.tools import ok_, eq_, set_trace
 
-N = 10
+N = 50
 
 def compare_graphs(g1, g2):
     eq_(set(g1.nodes()), set(g2.nodes()))

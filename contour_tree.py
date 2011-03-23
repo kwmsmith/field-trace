@@ -18,7 +18,7 @@ def uf_merge(uf_map, key1, key2):
     for key in keys_to_change:
         uf_map[key] = updated_set
 
-def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
+def join_split_tree_sparse(mesh, height_func, split=False):
     join_tree = DiGraph()
     # map of nodes to union-find set that it's in
     uf_map = {}
@@ -31,20 +31,19 @@ def join_split_tree_sparse(mesh, height_func, join_split_fac=1.0):
     supernode_map = {}
     # a list of (height, node) tuples
     # XXX: store height_func() results in mesh?
-    height_and_nodes = [(join_split_fac * height_func(node), node) for node in mesh.nodes()]
-    height_and_nodes.sort(reverse=True)
+    height_and_nodes = [(height_func(node), node) for node in mesh.nodes()]
+    height_and_nodes.sort(reverse=not split)
     for h, n in height_and_nodes:
-        # supernode_arc[n] = set([n])
         uf_map[n] = set([n])
         supernode_map[id(uf_map[n])] = n
         connect_nbrs = []
         edges = []
         for nbr in mesh.neighbors_iter(n):
             # XXX: remove call to height_func()
-            nbr_h = join_split_fac * height_func(nbr)
+            nbr_h = height_func(nbr)
             if nbr_h == h:
-                print "nbr_h == h"
-            if nbr_h <= h or uf_map[nbr] is uf_map[n]:
+                raise ValueError("nbr_h == h!!!")
+            if (split and nbr_h > h) or (not split and nbr_h < h) or (uf_map[nbr] is uf_map[n]):
                 continue
             connection_nbr_uf = supernode_map[id(uf_map[nbr])]
             edges.append((connection_nbr_uf, n))
@@ -150,21 +149,23 @@ def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
     for sn in split_to_add:
         splice_in_node(join, jarcs[sn], sn)
 
-def join_split_tree(mesh, height_func, join_split_fac=1.0):
+def join_split_tree(mesh, height_func, split=False):
     join_tree = DiGraph()
     # map of nodes to union-find set that it's in
     uf_map = {}
     # map of union-find set id to lowest node in the set.
     lowest_node_map = {}
     # a list of (height, node) tuples
-    height_and_nodes = [(join_split_fac * height_func(node), node) for node in mesh.nodes()]
-    height_and_nodes.sort(reverse=True)
+    height_and_nodes = [(height_func(node), node) for node in mesh.nodes()]
+    height_and_nodes.sort(reverse=not split)
     for h, n in height_and_nodes:
         uf_map[n] = set([n])
         lowest_node_map[id(uf_map[n])] = n
         for nbr in mesh.neighbors_iter(n):
-            nbr_h = join_split_fac * height_func(nbr)
-            if nbr_h < h or uf_map[nbr] is uf_map[n]:
+            nbr_h = height_func(nbr)
+            if nbr_h == h:
+                raise ValueError("nbr_h == h!!!")
+            if (split and nbr_h > h) or (not split and nbr_h < h) or (uf_map[nbr] is uf_map[n]):
                 continue
             # uf_merge() can change the uf_map[nbr], and hence, the lowest
             # point in nbr's union-find set. So we add the edge first before doing the
@@ -212,6 +213,8 @@ def contour_tree_from_join_split(join, split, height_func):
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
         leaf = leaves.pop()
+        # if leaf == (301, 354):
+            # import pdb; pdb.set_trace()
         if is_upper_leaf(leaf, join, split):
             this = join
             other = split
@@ -232,21 +235,23 @@ def contour_tree_from_join_split(join, split, height_func):
     return c_tree
 
 def sparse_contour_tree(mesh, height_func):
-    join, jarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=1.0)
-    split, sarcs = join_split_tree_sparse(mesh, height_func, join_split_fac=-1.0)
+    join, jarcs = join_split_tree_sparse(mesh, height_func, split=False)
+    split, sarcs = join_split_tree_sparse(mesh, height_func, split=True)
     rectify_join_split_trees(join, jarcs, split, sarcs, height_func)
     c_tree = contour_tree_from_join_split(join, split, height_func)
     return c_tree, get_regions_sparse(c_tree, jarcs, sarcs, height_func)
 
 def contour_tree(mesh, height_func):
-    join = join_split_tree(mesh, height_func, join_split_fac=1.0)
-    split = join_split_tree(mesh, height_func, join_split_fac=-1.0)
+    join = join_split_tree(mesh, height_func, split=False)
+    split = join_split_tree(mesh, height_func, split=True)
     return contour_tree_from_join_split(join, split, height_func)
 
 def critical_points(ctree):
     crit_pts = {}
     in_deg = ctree.in_degree()
     out_deg = ctree.out_degree()
+    # crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0 and out_deg[n] >= 1])
+    # crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0 and in_deg[n] >= 1])
     crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0])
     crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0])
     crit_pts['passes'] = set([n for n in out_deg if out_deg[n] >= 1 and in_deg[n] >= 2] +
@@ -273,8 +278,8 @@ def connect_diagonal(a, b, c, d):
     returns 'ac' or 'bd' indicating which nodes to connect in the square cell.
     
     """
-    return flattest(a, b, c, d)
-    # return envelope(a, b, c, d)
+    # return flattest(a, b, c, d)
+    return envelope(a, b, c, d)
     # return AC
 
 def make_mesh(arr):
@@ -291,10 +296,37 @@ def make_mesh(arr):
             b = arr[i,(j+1)%ny]
             c = arr[(i+1)%nx, (j+1)%ny]
             d = arr[(i+1)%nx, j]
-            if connect_diagonal(a, b, c, d) == AC:
+            con_dp = connect_diagonal(a, b, c, d)
+            if con_dp == AC:
                 G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
-            elif connect_diagonal(a, b, c, d) == BD:
+            elif con_dp == BD:
                 G.add_edge((i,(j+1)%ny), ((i+1)%nx, j))
             else:
                 raise RuntimeError("invalid return value from connect_diagonal")
     return G
+"""
+def _join_split_tree(mesh, height_func, join_split_fac=1.0):
+    join_tree = DiGraph()
+    # map of nodes to union-find set that it's in
+    uf_map = {}
+    # map of union-find set id to lowest node in the set.
+    lowest_node_map = {}
+    # a list of (height, node) tuples
+    height_and_nodes = [(join_split_fac * height_func(node), node) for node in mesh.nodes()]
+    height_and_nodes.sort(reverse=True)
+    for h, n in height_and_nodes:
+        uf_map[n] = set([n])
+        lowest_node_map[id(uf_map[n])] = n
+        for nbr in mesh.neighbors_iter(n):
+            nbr_h = join_split_fac * height_func(nbr)
+            if nbr_h <= h or uf_map[nbr] is uf_map[n]:
+                continue
+            # uf_merge() can change the uf_map[nbr], and hence, the lowest
+            # point in nbr's union-find set. So we add the edge first before doing the
+            # union-find merge.
+            lowest_in_nbr_uf = lowest_node_map[id(uf_map[nbr])]
+            join_tree.add_edge(lowest_in_nbr_uf, n)
+            uf_merge(uf_map, n, nbr)
+            lowest_node_map[id(uf_map[nbr])] = n
+    return join_tree
+"""

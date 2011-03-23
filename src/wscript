@@ -26,6 +26,12 @@ def build(bld):
 
     bld(
         features = 'c cshlib pyext',
+        source   = '_graph.pyx',
+        target   = '_graph',
+        )
+
+    bld(
+        features = 'c cshlib pyext',
         source   = '_field_trace.pyx',
         target   = '_field_trace',
         use      = "NUMPY",

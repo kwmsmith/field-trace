@@ -1,5 +1,7 @@
-from kaw_analysis import test_vcalc as tv
-# from wrap_gsl_interp2d import Interp2DPeriodic
+import tables
+from sys import getsizeof
+
+from wrap_gsl_interp2d import Interp2DPeriodic
 
 import field_trace
 import contour_tree as ct
@@ -7,15 +9,22 @@ import contour_tree as ct
 import numpy as np
 from itertools import izip
 
-from test_critical_point_network import random_periodic_upsample, visualize
+from test_critical_point_network import visualize
 
 import pylab as pl
 pl.ion()
 
+def nth_timeslice(h5file, gpname, n):
+    if isinstance(h5file, tables.file.File):
+        dta = h5file
+    elif isinstance(h5file, basestring):
+        dta = tables.openFile(h5file, mode='r')
+    gp = dta.getNode('/%s' % gpname)
+    children = gp._v_children.keys()
+    nth_ch = sorted(children)[n]
+    return gp._v_children[nth_ch]
 
 def h5_gen(h5file, gpname):
-    import sys
-    import tables
     if isinstance(h5file, tables.file.File):
         dta = h5file
     elif isinstance(h5file, basestring):
@@ -186,7 +195,6 @@ def test_level_set():
         raw_input("enter to continue")
 
 def test_detect_min_regions():
-    from itertools import izip
 
     for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
                                 h5_gen('data.h5', 'by'),
@@ -217,7 +225,6 @@ def num_nonredundant_nulls(nulls, shape):
 
 def save_figs():
     from upsample import upsample
-    ctr = 0
     for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
                                 h5_gen('data.h5', 'by'),
                                 h5_gen('data.h5', 'psi')):
@@ -260,33 +267,95 @@ def save_figs():
 
 # save_figs()
 
+def total_graph_memory(gr):
+    tot_mem = 0
+    tot_mem += getsizeof(gr.adj)
+    tot_mem += getsizeof(gr.node)
+    tot_mem += getsizeof(gr.edge)
+    return tot_mem
+
 def test_contour_tree():
-    for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
-                                h5_gen('data.h5', 'by'),
-                                h5_gen('data.h5', 'psi')):
-        bx = bx.read()
-        by = by.read()
+    from time import ctime
+    for n in (0, -1):
+        psi_arr = nth_timeslice('data.h5', 'psi', n=n)
+        # for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
+                                    # h5_gen('data.h5', 'by'),
+                                    # h5_gen('data.h5', 'psi')):
+        # bx = bx.read()
+        # by = by.read()
         arr = psi_arr.read()
+        print "array memory size: %d" % arr.nbytes
         def height_func(n):
             return arr[n]
         mesh = ct.make_mesh(arr)
-        c_tree, regions = ct.contour_tree(mesh, height_func, sparse=True)
+        print "mesh memory size: %d" % total_graph_memory(mesh)
+        # num_eql = 0
+        # for node in mesh:
+            # for nbr in mesh.neighbors(node):
+                # if arr[node] == arr[nbr]:
+                    # num_eql += 1
+        # print "number of equal height nodes: %d" % num_eql
+
+        c_tree_sparse, regions_sparse = ct.sparse_contour_tree(mesh, height_func)
+        cpts_sparse = ct.critical_points(c_tree_sparse)
+        peaks_sparse = cpts_sparse['peaks']
+        passes_sparse = cpts_sparse['passes']
+        pits_sparse = cpts_sparse['pits']
+        print "computing contour tree", ctime()
+        c_tree = ct.contour_tree(mesh, height_func)
+        print "computing regions", ctime()
+        regions = ct.get_regions_full(c_tree)
+        print "computing critical points", ctime()
         cpts = ct.critical_points(c_tree)
         peaks = cpts['peaks']
         passes = cpts['passes']
         pits = cpts['pits']
+        import pdb; pdb.set_trace()
+        print "sparse: peaks + pits - passes = %d" % (len(peaks_sparse) + len(pits_sparse) - len(passes_sparse))
+        print "len(crit_pts_sparse) = %d" % (len(peaks_sparse) + len(pits_sparse) + len(passes_sparse))
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
+        print "c_tree memory size: %d" % total_graph_memory(c_tree)
+        print "getsizeof(regions): %d" % getsizeof(regions)
+        regions2area = [len(r) for r in regions.values()]
         if 1:
-            ncontours = 30
             import pylab as pl
+            pl.figure()
+            pl.hist(regions2area, bins=pl.sqrt(len(regions2area)))
             filled_arr = arr.copy()
             def hf((a,b)): return height_func(a), height_func(b)
+            ctr = 0
             for region in sorted(regions, key=hf, reverse=True):
                 X = [_[0] for _ in regions[region]]
                 Y = [_[1] for _ in regions[region]]
                 filled_arr[X,Y] = 2*arr.max()
+                if not ctr:
+                    visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
+                    raw_input("enter to continue")
+                ctr += 1
+                ctr %= len(regions) / 20
             visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
             raw_input("enter to continue")
+            pl.close('all')
 
 test_contour_tree()
+
+"""
+n=-1:
+    (array([858, 192,  95,  59,  50,  28,  22,  12,  16,   9,   4,   3,   4,
+             1,   8,   3,   2,   4,   4,   0,   0,   0,   2,   0,   1,   2,
+             0,   2,   0,   0,   0,   0,   0,   0,   0,   0,   2]),
+     array([  2.00000000e+00,   1.86756757e+02,   3.71513514e+02,
+             5.56270270e+02,   7.41027027e+02,   9.25783784e+02,
+             1.11054054e+03,   1.29529730e+03,   1.48005405e+03,
+             1.66481081e+03,   1.84956757e+03,   2.03432432e+03,
+             2.21908108e+03,   2.40383784e+03,   2.58859459e+03,
+             2.77335135e+03,   2.95810811e+03,   3.14286486e+03,
+             3.32762162e+03,   3.51237838e+03,   3.69713514e+03,
+             3.88189189e+03,   4.06664865e+03,   4.25140541e+03,
+             4.43616216e+03,   4.62091892e+03,   4.80567568e+03,
+             4.99043243e+03,   5.17518919e+03,   5.35994595e+03,
+             5.54470270e+03,   5.72945946e+03,   5.91421622e+03,
+             6.09897297e+03,   6.28372973e+03,   6.46848649e+03,
+             6.65324324e+03,   6.83800000e+03]))
+"""
