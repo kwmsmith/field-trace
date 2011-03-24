@@ -1,5 +1,4 @@
-# cython: profile=True
-from collections import defaultdict
+# cython: profile=False
 
 # successors -- check
 # predecessors -- check
@@ -14,147 +13,179 @@ from collections import defaultdict
 
 # nodes
 
-class Graph(object):
+cdef class Graph(object):
+
+    cdef readonly dict adj
 
     def __init__(self):
-        self._adj = defaultdict(set)
+        self.adj = {}
 
     def neighbors(self, node):
-        if node in self._adj:
-            return self._adj[node]
-        else:
-            raise KeyError(str(node))
+        # try:
+        return list(self.adj[node])
+        # except KeyError:
+            # raise KeyError("node %s is not in the graph" % (node,))
 
-    neighbors_iter = neighbors
+    def neighbors_iter(self, node):
+        # try:
+        return list(self.adj[node])
+        # except KeyError:
+            # raise KeyError("node %s is not in the graph" % (node,))
 
-    def degree(self, node):
-        if node in self._adj:
-            return len(self._adj[node])
+    def degree_iter(self, node=None):
+        if node is None:
+            nodes_nbrs = iter(self.adj.items())
         else:
-            raise KeyError(str(node))
+            nodes_nbrs=[(n,self.adj[n]) for n in self.adj[node]]
+        return [(n, len(nbrs)+(n in nbrs)) for n,nbrs in nodes_nbrs]
+
+    def degree(self, node=None):
+        if node in self.adj: # return a single node
+            return self.degree_iter(node)[1]
+        else:           # return a dict
+            return dict(self.degree_iter(node))
+
+    def nodes_iter(self):
+        return iter(self.adj.keys())
 
     def nodes(self):
-        return self._adj.keys()
+        return list(self.nodes_iter())
 
-    def add_edge(self, a, b):
-        self._adj[a].add(b)
-        self._adj[b].add(a)
-        assert b in self._adj[a]
-        assert a in self._adj[b]
-
-    def add_edges_from(self, edges):
-        for (a, b) in edges:
-            self.add_edge(a, b)
-
-    def remove_edge(self, a, b):
-        if a in self._adj and b in self._adj:
-            self._adj[a].remove(b)
-            if a != b:
-                self._adj[b].remove(a)
-        else:
-            raise KeyError("edge (%s, %s) not in graph." % (a, b))
-
-    def remove_node(self, node):
-        if node in self._adj:
-            for nbr in self.neighbors(node).copy():
-                self.remove_edge(node, nbr)
-            del self._adj[node]
-        else:
-            raise KeyError(str(node))
-
-    def __len__(self):
-        return len(self._adj)
-
-    def edges(self):
-        edges = set()
-        for start in self._adj:
-            for next in self.neighbors(start):
-                if (next, start) not in edges:
-                    edges.add((start, next))
-        return edges
-
-class DiGraph(object):
-
-    def __init__(self):
-        self._adj = defaultdict(set)
-        self._inv = defaultdict(set)
-
-    def successors(self, node):
-        if node in self._adj:
-            return self._adj[node]
-        else:
-            raise KeyError(str(node))
-
-    def predecessors(self, node):
-        if node in self._inv:
-            return self._inv[node]
-        else:
-            raise KeyError(str(node))
-
-    def in_degree(self, node=None):
-        if node is None:
-            return dict([(n, self._in_degree(n)) for n in self._adj])
-        else:
-            return self._in_degree(node)
-
-    def _in_degree(self, node):
-        if node in self._inv:
-            return len(self._inv[node])
-        else:
-            raise KeyError(str(node))
-
-    def out_degree(self, node=None):
-        if node is None:
-            return dict([(n, self._out_degree(n)) for n in self._adj])
-        else:
-            return self._out_degree(node)
-
-    def _out_degree(self, node):
-        if node in self._adj:
-            return len(self._adj[node])
-        else:
-            raise KeyError(str(node))
-
-    def add_edge(self, a, b):
-        self._adj[a].add(b)
-        self._adj[b]
-        self._inv[b].add(a)
-        self._inv[a]
+    def add_edge(self, u, v):
+        # add nodes
+        if u not in self.adj:
+            self.adj[u] = set()
+        if v not in self.adj:
+            self.adj[v] = set()
+        self.adj[u].add(v)
+        self.adj[v].add(u)
 
     def add_edges_from(self, edges):
         for (a, b) in edges:
             self.add_edge(a, b)
 
-    def remove_edge(self, a, b):
-        if a in self._adj and b in self._inv:
-            self._adj[a].remove(b)
-            self._inv[b].remove(a)
-        else:
-            raise KeyError("%s or %s not in graph." % (a, b))
+    def remove_edge(self, u, v):
+        # try:
+        self.adj[u].remove(v)
+        if u != v:  # self-loop needs only one entry removed
+            self.adj[v].remove(u)
+        # except KeyError:
+            # raise KeyError("The edge %s-%s is not in the graph"%(u,v))
 
-    def remove_node(self, node):
-        if node in self._adj:
-            for succ in self.successors(node).copy():
-                self.remove_edge(node, succ)
-            for pred in self.predecessors(node).copy():
-                self.remove_edge(pred, node)
-            del self._adj[node]
-            if node in self._inv:
-                del self._inv[node]
+    def remove_node(self, n):
+        adj = self.adj
+        # try:
+        nbrs = adj[n] # keys handles self-loops (allow mutation later)
+        # except KeyError: # NetworkXError if n not in self
+            # raise KeyError("The node %s is not in the graph."%(n,))
+        if n not in nbrs:
+            for u in nbrs:
+                adj[u].remove(n)   # remove all edges n-u in graph
         else:
-            raise KeyError(str(node))
+            for u in nbrs.copy():
+                adj[u].remove(n)   # remove all edges n-u in graph
+        del adj[n]          # now remove node
 
     def __len__(self):
-        return len(self._adj) + len(self._inv)
+        return len(self.adj)
 
     order = __len__
 
-    def nodes(self):
-        return self._adj.keys()
-
-    def edges(self):
+    def edges_iter(self):
+        seen=set()     # helper dict to keep track of multiply stored edges
         edges = []
-        for start in self._adj:
-            for next in self.successors(start):
-                edges.append((start, next))
+        nodes_nbrs = iter(self.adj.items())
+        for n,nbrs in nodes_nbrs:
+            for nbr in nbrs:
+                if nbr not in seen:
+                    edges.append((n,nbr))
+            seen.add(n)
         return edges
+    
+    def edges(self):
+        return self.edges_iter()
+
+cdef class DiGraph(Graph):
+
+    cdef readonly dict pred, succ
+
+    def __init__(self):
+        self.adj = {}  # empty adjacency dictionary
+        self.pred = {}  # predecessor
+        self.succ = self.adj  # successor
+
+    def successors(self, n):
+        # try:
+        return list(self.succ[n])
+        # except KeyError:
+            # raise KeyError("The node %s is not in the digraph."%(n,))
+
+    def predecessors(self, n):
+        # try:
+        return list(self.pred[n])
+        # except KeyError:
+            # raise KeyError("The node %s is not in the digraph."%(n,))
+
+    def in_degree_iter(self, node=None):
+        if node is None:
+            nodes_nbrs = self.pred.items()
+        else:
+            nodes_nbrs=[(node,self.pred[node])]
+        return [(n, len(nbrs)) for n,nbrs in nodes_nbrs]
+
+    def in_degree(self, nbunch=None):
+        if nbunch in self.adj:      # return a single node
+            return self.in_degree_iter(nbunch)[0][1]
+        else:           # return a dict
+            return dict(self.in_degree_iter(nbunch))
+
+    def out_degree_iter(self, node=None):
+        if node is None:
+            nodes_nbrs= self.succ.items()
+        else:
+            nodes_nbrs=[(node,self.succ[node])]
+        return [(n, len(nbrs)) for n,nbrs in nodes_nbrs]
+
+    def out_degree(self, nbunch=None):
+        if nbunch in self.adj:      # return a single node
+            return self.out_degree_iter(nbunch)[0][1]
+        else:           # return a dict
+            return dict(self.out_degree_iter(nbunch))
+
+    def add_edge(self, u, v):
+        # add nodes
+        if u not in self.succ:
+            self.succ[u] = set()
+            self.pred[u] = set()
+        if v not in self.succ:
+            self.succ[v] = set()
+            self.pred[v] = set()
+        # add the edge
+        self.succ[u].add(v)
+        self.pred[v].add(u)
+
+    def add_edges_from(self, edges):
+        for (a, b) in edges:
+            self.add_edge(a, b)
+
+    def remove_edge(self, u, v):
+        # try:
+        self.succ[u].remove(v)
+        self.pred[v].remove(u)
+        # except KeyError:
+            # raise KeyError("The edge %s-%s not in graph."%(u,v))
+
+    def remove_node(self, n):
+        # try:
+        nbrs=self.succ[n]
+        # except KeyError: # NetworkXError if n not in self
+            # raise KeyError("The node %s is not in the digraph."%(n,))
+        for u in nbrs:
+            self.pred[u].remove(n)
+        del self.succ[n]          # remove node from succ
+        for u in self.pred[n]:
+            self.succ[u].remove(n)
+        del self.pred[n]          # remove node from pred
+
+    def edges_iter(self):
+        return [(n, nbr) for n,nbrs in self.adj.items() for nbr in nbrs]

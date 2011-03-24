@@ -1,7 +1,7 @@
 from collections import defaultdict
 
-# from graph import Graph, DiGraph
-from networkx import Graph, DiGraph
+from _graph import Graph, DiGraph
+# from networkx import Graph, DiGraph
 
 def uf_merge(uf_map, key1, key2):
     s1 = uf_map[key1]
@@ -85,7 +85,7 @@ def get_regions_full(contour_tree):
     regions = {}
     for cpt in cpts_flat:
         region = [cpt]
-        for lower_nbr in contour_tree.successors_iter(cpt):
+        for lower_nbr in contour_tree.successors(cpt):
             cur = lower_nbr
             while cur not in cpts_flat:
                 region.append(cur)
@@ -105,7 +105,7 @@ def get_regions_sparse(contour_tree, jnode2super, snode2super, height_func):
         supern = snode2super[node]
         ssuper2nodes[supern].append(node)
     regions = {}
-    for higher_node in contour_tree:
+    for higher_node in contour_tree.adj:
         lower_nodes = contour_tree.successors(higher_node)
         for lower_node in lower_nodes:
             if higher_node in jsuper2nodes and lower_node in jsuper2nodes:

@@ -6,11 +6,18 @@ from random import randrange, shuffle
 
 from nose.tools import ok_, eq_, set_trace
 
-N = 50
+N = 20
 
 def compare_graphs(g1, g2):
     eq_(set(g1.nodes()), set(g2.nodes()))
     eq_(set(g1.edges()), set(g2.edges()))
+    for n in g1.nodes():
+        eq_(sorted(g1.adj[n]), sorted(g2.adj[n]))
+    try:
+        for n in g1.nodes():
+            eq_(sorted(g1.pred[n]), sorted(g2.pred[n]))
+    except AttributeError:
+        pass
 
 def test_random():
     nx_g = nx.Graph()
@@ -41,6 +48,7 @@ def test_random_removes():
             nx_g.add_edge(a, b)
             gr_dg.add_edge(a, b)
             gr_g.add_edge(a, b)
+            compare_graphs(gr_dg, nx_dg)
         for e in gr_dg.edges():
             gr_dg.remove_edge(*e)
             nx_dg.remove_edge(*e)
@@ -50,6 +58,7 @@ def test_random_removes():
         for e in gr_g.edges():
             gr_g.remove_edge(*e)
             nx_g.remove_edge(*e)
+            compare_graphs(gr_g, nx_g)
         ok_(not gr_g.edges())
         ok_(not nx_g.edges())
         compare_graphs(gr_g, nx_g)
@@ -67,9 +76,11 @@ def test_random_remove_nodes():
             nx_g.add_edge(a, b)
             gr_dg.add_edge(a, b)
             gr_g.add_edge(a, b)
+            compare_graphs(gr_dg, nx_dg)
         for n in gr_dg.nodes():
             gr_dg.remove_node(n)
             nx_dg.remove_node(n)
+            compare_graphs(gr_dg, nx_dg)
         compare_graphs(gr_dg, nx_dg)
         ok_(not gr_dg.nodes())
         ok_(not nx_dg.nodes())
@@ -78,6 +89,7 @@ def test_random_remove_nodes():
         for n in gr_g.nodes():
             gr_g.remove_node(n)
             nx_g.remove_node(n)
+            compare_graphs(gr_g, nx_g)
         ok_(not gr_g.edges())
         ok_(not nx_g.edges())
         ok_(not gr_g.nodes())
