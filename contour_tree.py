@@ -71,7 +71,7 @@ def splice_in_node(gr, start, newnode):
     gr.add_edge(start, newnode)
     if succs:
         if len(succs) != 1:
-            import pdb; pdb.set_trace()
+            raise ValueError("len(succs) != 1: %s" % (succs,))
         succ = succs[0]
         gr.add_edge(newnode, succ)
         gr.remove_edge(start, succ)
@@ -213,8 +213,6 @@ def contour_tree_from_join_split(join, split, height_func):
     leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
     while len(leaves) > 1:
         leaf = leaves.pop()
-        # if leaf == (301, 354):
-            # import pdb; pdb.set_trace()
         if is_upper_leaf(leaf, join, split):
             this = join
             other = split
@@ -250,8 +248,6 @@ def critical_points(ctree):
     crit_pts = {}
     in_deg = ctree.in_degree()
     out_deg = ctree.out_degree()
-    # crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0 and out_deg[n] >= 1])
-    # crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0 and in_deg[n] >= 1])
     crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0])
     crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0])
     crit_pts['passes'] = set([n for n in out_deg if out_deg[n] >= 1 and in_deg[n] >= 2] +
@@ -304,29 +300,3 @@ def make_mesh(arr):
             else:
                 raise RuntimeError("invalid return value from connect_diagonal")
     return G
-"""
-def _join_split_tree(mesh, height_func, join_split_fac=1.0):
-    join_tree = DiGraph()
-    # map of nodes to union-find set that it's in
-    uf_map = {}
-    # map of union-find set id to lowest node in the set.
-    lowest_node_map = {}
-    # a list of (height, node) tuples
-    height_and_nodes = [(join_split_fac * height_func(node), node) for node in mesh.nodes()]
-    height_and_nodes.sort(reverse=True)
-    for h, n in height_and_nodes:
-        uf_map[n] = set([n])
-        lowest_node_map[id(uf_map[n])] = n
-        for nbr in mesh.neighbors_iter(n):
-            nbr_h = join_split_fac * height_func(nbr)
-            if nbr_h <= h or uf_map[nbr] is uf_map[n]:
-                continue
-            # uf_merge() can change the uf_map[nbr], and hence, the lowest
-            # point in nbr's union-find set. So we add the edge first before doing the
-            # union-find merge.
-            lowest_in_nbr_uf = lowest_node_map[id(uf_map[nbr])]
-            join_tree.add_edge(lowest_in_nbr_uf, n)
-            uf_merge(uf_map, n, nbr)
-            lowest_node_map[id(uf_map[nbr])] = n
-    return join_tree
-"""

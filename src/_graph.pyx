@@ -1,18 +1,5 @@
 # cython: profile=False
 
-# successors -- check
-# predecessors -- check
-# neighbors -- check
-# in_degree -- check
-# out_degree -- check
-# degree -- check
-
-# add_edge
-# add_edges_from
-# remove_edge
-
-# nodes
-
 cdef class Graph(object):
 
     cdef readonly dict adj
