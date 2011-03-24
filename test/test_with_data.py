@@ -269,9 +269,12 @@ def save_figs():
 
 def total_graph_memory(gr):
     tot_mem = 0
-    tot_mem += getsizeof(gr.adj)
-    tot_mem += getsizeof(gr.node)
-    tot_mem += getsizeof(gr.edge)
+    try:
+        tot_mem += getsizeof(gr.adj)
+        tot_mem += getsizeof(gr.node)
+        tot_mem += getsizeof(gr.edge)
+    except AttributeError:
+        pass
     return tot_mem
 
 def test_contour_tree():
@@ -286,8 +289,10 @@ def test_contour_tree():
         arr = psi_arr.read()
         print "array memory size: %d" % arr.nbytes
         def height_func(n):
-            return arr[n]
+            return (arr[n], n)
+        print ctime(), "meshing array...",
         mesh = ct.make_mesh(arr)
+        print ctime(), "done"
         print "mesh memory size: %d" % total_graph_memory(mesh)
         # num_eql = 0
         # for node in mesh:
@@ -296,21 +301,25 @@ def test_contour_tree():
                     # num_eql += 1
         # print "number of equal height nodes: %d" % num_eql
 
+        print ctime(), "ct.sparse_contour_tree()...",
         c_tree_sparse, regions_sparse = ct.sparse_contour_tree(mesh, height_func)
+        print ctime(), "done"
         cpts_sparse = ct.critical_points(c_tree_sparse)
         peaks_sparse = cpts_sparse['peaks']
         passes_sparse = cpts_sparse['passes']
         pits_sparse = cpts_sparse['pits']
-        print "computing contour tree", ctime()
+        print ctime(), "computing contour tree...",
         c_tree = ct.contour_tree(mesh, height_func)
-        print "computing regions", ctime()
+        print ctime(), "done"
+        print ctime(), "computing regions...",
         regions = ct.get_regions_full(c_tree)
-        print "computing critical points", ctime()
+        print ctime(), "done"
+        print ctime(), "computing critical points...",
         cpts = ct.critical_points(c_tree)
+        print ctime(), "done"
         peaks = cpts['peaks']
         passes = cpts['passes']
         pits = cpts['pits']
-        import pdb; pdb.set_trace()
         print "sparse: peaks + pits - passes = %d" % (len(peaks_sparse) + len(pits_sparse) - len(passes_sparse))
         print "len(crit_pts_sparse) = %d" % (len(peaks_sparse) + len(pits_sparse) + len(passes_sparse))
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
@@ -322,6 +331,8 @@ def test_contour_tree():
             import pylab as pl
             pl.figure()
             pl.hist(regions2area, bins=pl.sqrt(len(regions2area)))
+            raw_input("enter to continue")
+            pl.close('all')
             filled_arr = arr.copy()
             def hf((a,b)): return height_func(a), height_func(b)
             ctr = 0
@@ -337,6 +348,12 @@ def test_contour_tree():
             visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
             raw_input("enter to continue")
             pl.close('all')
+
+        del c_tree
+        del regions
+        del cpts
+        del c_tree_sparse
+        del regions_sparse
 
 test_contour_tree()
 
