@@ -1,3 +1,4 @@
+from __future__ import print_function
 import tables
 from sys import getsizeof
 
@@ -118,17 +119,17 @@ def test_level_set():
     test_data = psi_arrs[arr_idx].astype(np.double)
     N = test_data.shape[0]
 
-    print "locating nulls"
+    print("locating nulls")
     dd = field_trace.Derivator(test_data, N, N)
     nulls = field_trace.find_null_cells(dd)
     null0s = [(n.x0, n.y0) for n in nulls]
 
     psi_interp = Interp2DPeriodic(N, N, test_data)
 
-    print "computing level sets"
+    print("computing level sets")
     levels = [null.levelset for null in nulls]
 
-    print "classifying nulls"
+    print("classifying nulls")
 
     peaks = []
     saddles = []
@@ -141,18 +142,18 @@ def test_level_set():
     peak0s = [(p.x0, p.y0) for p in peaks]
     saddle0s = [(s.x0, s.y0) for s in saddles]
 
-    print "getting min regions"
+    print( "getting min regions")
     regions = []
     for null in nulls:
         regions.extend(null.regions)
 
-    print "number of regions: %d" % len(regions)
+    print( "number of regions: %d" % len(regions))
 
     min_regions = field_trace.filter_min_regions(regions)
 
-    print "number of min regions: %d" % len(min_regions)
+    print( "number of min regions: %d" % len(min_regions))
 
-    print "plotting"
+    print( "plotting")
 
     if 1:
         import pylab as pl
@@ -238,11 +239,11 @@ def save_figs():
         mins = [null for null in all_nulls if null.is_minimum()]
         maxs = [null for null in all_nulls if null.is_maximum()]
         saddles = [null for null in all_nulls if null.is_saddle()]
-        print "-"*80
-        print "num mins: %d unique mins: %d" % (len(mins), num_nonredundant_nulls(mins, psi_arr.shape))
-        print "num maxs: %d unique maxs: %d" % (len(maxs), num_nonredundant_nulls(maxs, psi_arr.shape))
-        print "num saddles: %d unique saddles: %d" % (len(saddles), num_nonredundant_nulls(saddles, psi_arr.shape))
-        print "num nulls: %d unique nulls: %d" % (len(all_nulls), num_nonredundant_nulls(all_nulls, psi_arr.shape))
+        print( "-"*80)
+        print( "num mins: %d unique mins: %d" % (len(mins), num_nonredundant_nulls(mins, psi_arr.shape)))
+        print( "num maxs: %d unique maxs: %d" % (len(maxs), num_nonredundant_nulls(maxs, psi_arr.shape)))
+        print( "num saddles: %d unique saddles: %d" % (len(saddles), num_nonredundant_nulls(saddles, psi_arr.shape)))
+        print( "num nulls: %d unique nulls: %d" % (len(all_nulls), num_nonredundant_nulls(all_nulls, psi_arr.shape)))
         # print "peaks - saddles: %d" % (len(maxs)+len(mins) - len(saddles))
         # print "num maxs: %d" % (len(maxs))
         # print "num mins: %d" % (len(mins))
@@ -277,83 +278,83 @@ def total_graph_memory(gr):
         pass
     return tot_mem
 
-def test_contour_tree():
+def logger(ss, newline=True):
     from time import ctime
+    from sys import stderr
+    stderr.write("%s: " % ctime())
+    stderr.write(ss)
+    if newline:
+        stderr.write('\n')
+
+def test_contour_tree():
     for n in (0, -1):
         psi_arr = nth_timeslice('data.h5', 'psi', n=n)
-        # for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
-                                    # h5_gen('data.h5', 'by'),
-                                    # h5_gen('data.h5', 'psi')):
-        # bx = bx.read()
-        # by = by.read()
+        bx_arr = nth_timeslice('data.h5', 'bx', n=n)
+        by_arr = nth_timeslice('data.h5', 'by', n=n)
+        bx = bx_arr.read()
+        by = by_arr.read()
+        b_mag = np.sqrt(bx**2 + by**2)
         arr = psi_arr.read()
-        print "array memory size: %d" % arr.nbytes
+        logger("array memory size: %d" % arr.nbytes)
         def height_func(n):
             return (arr[n], n)
-        print ctime(), "meshing array...",
+        logger("meshing array...")
         mesh = ct.make_mesh(arr)
-        print ctime(), "done"
-        print "mesh memory size: %d" % total_graph_memory(mesh)
-        # num_eql = 0
-        # for node in mesh:
-            # for nbr in mesh.neighbors(node):
-                # if arr[node] == arr[nbr]:
-                    # num_eql += 1
-        # print "number of equal height nodes: %d" % num_eql
+        logger("done")
+        logger("mesh memory size: %d" % total_graph_memory(mesh))
 
-        print ctime(), "ct.sparse_contour_tree()...",
-        c_tree_sparse, regions_sparse = ct.sparse_contour_tree(mesh, height_func)
-        print ctime(), "done"
-        cpts_sparse = ct.critical_points(c_tree_sparse)
-        peaks_sparse = cpts_sparse['peaks']
-        passes_sparse = cpts_sparse['passes']
-        pits_sparse = cpts_sparse['pits']
-        print ctime(), "computing contour tree...",
+        logger("computing contour tree...")
         c_tree = ct.contour_tree(mesh, height_func)
-        print ctime(), "done"
-        print ctime(), "computing regions...",
+        logger("done")
+
+        logger("computing regions...")
         regions = ct.get_regions_full(c_tree)
-        print ctime(), "done"
-        print ctime(), "computing critical points...",
+        logger("done")
+
+        logger("computing critical points...")
         cpts = ct.critical_points(c_tree)
-        print ctime(), "done"
+        logger("done")
+
         peaks = cpts['peaks']
         passes = cpts['passes']
         pits = cpts['pits']
-        print "sparse: peaks + pits - passes = %d" % (len(peaks_sparse) + len(pits_sparse) - len(passes_sparse))
-        print "len(crit_pts_sparse) = %d" % (len(peaks_sparse) + len(pits_sparse) + len(passes_sparse))
-        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
-        print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        print "c_tree memory size: %d" % total_graph_memory(c_tree)
-        print "getsizeof(regions): %d" % getsizeof(regions)
-        regions2area = [len(r) for r in regions.values()]
+        all_cpts = peaks.union(passes).union(pits)
+
+        logger("peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes)))
+        logger("len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes)))
+
+        cpt_grads = [b_mag[cpt] / b_mag.min() for cpt in all_cpts]
+        logger("b_mag.mean()=%f" % b_mag.mean())
+        logger("b_mag.std()=%f" % b_mag.std())
+        logger("b_mag.max()=%f" % b_mag.max())
+        logger("b_mag.min()=%f" % b_mag.min())
         if 1:
             import pylab as pl
             pl.figure()
-            pl.hist(regions2area, bins=pl.sqrt(len(regions2area)))
+            pl.hist(cpt_grads, bins=pl.sqrt(len(cpt_grads)))
+            pl.title("cpoint gradient values")
             raw_input("enter to continue")
             pl.close('all')
-            filled_arr = arr.copy()
-            def hf((a,b)): return height_func(a), height_func(b)
-            ctr = 0
-            for region in sorted(regions, key=hf, reverse=True):
-                X = [_[0] for _ in regions[region]]
-                Y = [_[1] for _ in regions[region]]
-                filled_arr[X,Y] = 2*arr.max()
-                if not ctr:
-                    visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
-                    raw_input("enter to continue")
-                ctr += 1
-                ctr %= len(regions) / 20
-            visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
-            raw_input("enter to continue")
-            pl.close('all')
+            if 0:
+                filled_arr = arr.copy()
+                def hf((a,b)): return height_func(a), height_func(b)
+                ctr = 0
+                for region in sorted(regions, key=hf, reverse=True):
+                    X = [_[0] for _ in regions[region]]
+                    Y = [_[1] for _ in regions[region]]
+                    filled_arr[X,Y] = 2*arr.max()
+                    if not ctr:
+                        visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
+                        raw_input("enter to continue")
+                    ctr += 1
+                    ctr %= len(regions) / 20
+                visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
+                raw_input("enter to continue")
+                pl.close('all')
 
         del c_tree
         del regions
         del cpts
-        del c_tree_sparse
-        del regions_sparse
 
 test_contour_tree()
 
