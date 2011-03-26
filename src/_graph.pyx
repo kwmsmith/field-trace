@@ -132,6 +132,19 @@ cdef class DiGraph(Graph):
         # except KeyError:
             # raise KeyError("The node %s is not in the digraph."%(n,))
 
+    def degree(self, node=None):
+        if node in self.adj: # return a single node
+            return self.degree_iter(node)[0][1]
+        else:           # return a dict
+            return dict(self.degree_iter(node))
+
+    def degree_iter(self, node=None):
+        if node is None:
+            nodes_nbrs = zip(self.succ.items(),self.pred.items())
+        else:
+            nodes_nbrs = [(node,self.succ[node]), (node, self.pred[node])]
+        return [(n, len(succ)+len(pred)) for (n,succ),(n2,pred) in nodes_nbrs]
+
     def in_degree_iter(self, node=None):
         if node is None:
             nodes_nbrs = self.pred.items()
