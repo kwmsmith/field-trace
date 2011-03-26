@@ -2,9 +2,9 @@ import networkx as nx
 
 import _graph as gr
 
-from random import randrange, shuffle
+from random import randrange
 
-from nose.tools import ok_, eq_, set_trace
+from nose.tools import ok_, eq_
 
 N = 20
 

@@ -76,7 +76,38 @@ def splice_in_node(gr, start, newnode):
         gr.add_edge(newnode, succ)
         gr.remove_edge(start, succ)
 
-def get_regions_full(contour_tree):
+def augmented_tree_to_supertree(contour_tree):
+    '''
+    takes a fully augmented contour tree and returns an unaugmented contour
+    tree with the edge arcs as edge attributes.
+
+    Note: always returns a networkx Graph.
+    '''
+    import networkx as _nx
+    cpts = critical_points(contour_tree)
+    peaks = cpts['peaks']
+    pits = cpts['pits']
+    passes = cpts['passes']
+    cpts_flat = set(peaks.union(pits).union(passes))
+    edge2regions = []
+    for cpt in cpts_flat:
+        for lower_nbr in contour_tree.successors(cpt):
+            region = [cpt]
+            cur = lower_nbr
+            # if not isinstance(cpt, tuple):
+                # import pdb; pdb.set_trace()
+            while cur not in cpts_flat:
+                region.append(cur)
+                cur = contour_tree.successors(cur)[0]
+            # add the last point
+            region.append(cur)
+            edge2regions.append((cpt, cur, dict(arc=region)))
+    supertree = _nx.DiGraph(edge2regions)
+    return supertree
+
+def get_regions_full(contour_tree, sparse_tree=False):
+    if sparse_tree:
+        s_tree = DiGraph()
     cpts = critical_points(contour_tree)
     peaks = cpts['peaks']
     pits = cpts['pits']
@@ -84,16 +115,23 @@ def get_regions_full(contour_tree):
     cpts_flat = set(peaks.union(pits).union(passes))
     regions = {}
     for cpt in cpts_flat:
-        region = [cpt]
         for lower_nbr in contour_tree.successors(cpt):
+            region = [cpt]
             cur = lower_nbr
+            # if not isinstance(cpt, tuple):
+                # import pdb; pdb.set_trace()
             while cur not in cpts_flat:
                 region.append(cur)
                 cur = contour_tree.successors(cur)[0]
             # add the last point
             region.append(cur)
-            regions[(cpt, lower_nbr)] = region
-    return regions
+            regions[(cpt, cur)] = region
+            if sparse_tree:
+                s_tree.add_edge(cpt, cur)
+    if sparse_tree:
+        return regions, s_tree
+    else:
+        return regions
 
 def get_regions_sparse(contour_tree, jnode2super, snode2super, height_func):
     jsuper2nodes = defaultdict(list)
@@ -242,7 +280,9 @@ def sparse_contour_tree(mesh, height_func):
 def contour_tree(mesh, height_func):
     join = join_split_tree(mesh, height_func, split=False)
     split = join_split_tree(mesh, height_func, split=True)
-    return contour_tree_from_join_split(join, split, height_func)
+    c_tree = contour_tree_from_join_split(join, split, height_func)
+    supertree = augmented_tree_to_supertree(c_tree)
+    return supertree
 
 def critical_points(ctree):
     crit_pts = {}

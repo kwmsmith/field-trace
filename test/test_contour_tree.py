@@ -4,7 +4,7 @@ from random import randint
 
 import contour_tree as ct
 
-from nose.tools import eq_
+from nose.tools import eq_, set_trace
 
 from test_critical_point_network import random_periodic_upsample, visualize
 
@@ -41,11 +41,11 @@ class test_contour_tree(object):
         if 0:
             import pylab as pl
             pl.ion()
-            nx_join = join.to_nx()
+            nx_join = join.to_networkx()
             _nx.draw_shell(nx_join)
             pl.title('join')
             pl.figure()
-            nx_split = split.to_nx()
+            nx_split = split.to_networkx()
             _nx.draw_shell(nx_split)
             pl.title('split')
             raw_input("enter to continue")
@@ -58,6 +58,21 @@ class test_contour_tree(object):
         eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
         eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
         eq_(sorted(crit_pts['passes']), sorted([3, 4, 5, 6]))
+        regions, sparse_tree = ct.get_regions_full(contour_tree, sparse_tree=True)
+
+        if 0:
+            import pylab as pl
+            pl.ion()
+            try:
+                _nx.draw(sparse_tree.to_networkx())
+            except AttributeError:
+                _nx.draw(sparse_tree)
+            pl.figure()
+            try:
+                _nx.draw(contour_tree.to_networkx())
+            except AttributeError:
+                _nx.draw(contour_tree)
+            raw_input("enter to continue")
 
     def test_contour_tree_sparse(self):
         join, join_arcs = ct.join_split_tree_sparse(self.mesh, self.height_func)
@@ -98,8 +113,9 @@ class test_contour_tree(object):
                     (8, 6): [6.9, 8],
                     })
 
+    NN = 32
     def test_arr_full(self):
-        arr = random_periodic_upsample(32, 4, seed=1)
+        arr = random_periodic_upsample(self.NN, 4, seed=1)
         for _ in range(4):
             _set_nbr_height_equal(arr)
         mesh = ct.make_mesh(arr)
@@ -113,7 +129,11 @@ class test_contour_tree(object):
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
         print 'tot points covered: %d' % len(contour_tree)
-        eq_(len(set(contour_tree.nodes())), arr.size)
+        coverage = set()
+        regions = [D['arc'] for (n1, n2, D) in contour_tree.edges_iter(data=True)]
+        for r in regions:
+            coverage.update(r)
+        eq_(len(coverage), arr.size)
         regions = ct.get_regions_full(contour_tree)
         c_tree_sparse, regions_sparse = ct.sparse_contour_tree(mesh, height_func)
         cpts_sparse = ct.critical_points(c_tree_sparse)
@@ -127,7 +147,7 @@ class test_contour_tree(object):
             vis(arr, height_func=height_func, crit_pts=cpts, regions=regions)
 
     def test_arr_sparse(self):
-        arr = random_periodic_upsample(32, 4, seed=1)
+        arr = random_periodic_upsample(self.NN, 4, seed=1)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return (arr[n], n)

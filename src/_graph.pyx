@@ -1,5 +1,7 @@
 # cython: profile=False
 
+import networkx as _nx
+
 cdef class Graph(object):
 
     cdef readonly dict adj
@@ -92,6 +94,23 @@ cdef class Graph(object):
     def edges(self):
         return self.edges_iter()
 
+    def networkx_graph(self):
+        return _nx.Graph
+
+    def to_networkx(self, edge_data=None, edge_data_name=None):
+        if edge_data and edge_data_name is None:
+            raise ValueError("edge_data supplied but no edge_data_name")
+        elif edge_data and edge_data_name:
+            _edge_data = []
+            for e,v in edge_data:
+                n1, n2 = e
+                if n2 not in self.adj[n1]:
+                    raise RuntimeError("edge %s-%s not in graph" % (n1, n2))
+                _edge_data.append((n1, n2, dict(edge_data_name=v)))
+            return self.networkx_graph(_edge_data)
+        return self.networkx_graph(self.edges())
+
+
 cdef class DiGraph(Graph):
 
     cdef readonly dict pred, succ
@@ -176,3 +195,22 @@ cdef class DiGraph(Graph):
 
     def edges_iter(self):
         return [(n, nbr) for n,nbrs in self.adj.items() for nbr in nbrs]
+
+    def to_networkx(self, edge_data=None, node_data=None):
+        return _nx.DiGraph(self.edges())
+
+    def networkx_graph(self):
+        return _nx.DiGraph
+
+    # def to_networkx(self, edge_data=None, edge_data_name=None):
+        # if edge_data and edge_data_name is None:
+            # raise ValueError("edge_data supplied but no edge_data_name")
+        # elif edge_data and edge_data_name:
+            # _edge_data = []
+            # for e,v in edge_data:
+                # n1, n2 = e
+                # if n2 not in self.adj[n1]:
+                    # raise RuntimeError("edge %s-%s not in graph" % (n1, n2))
+                # _edge_data.append((n1, n2, dict(edge_data_name=v)))
+            # return _nx.DiGraph(_edge_data)
+        # return _nx.DiGraph(self.edges())
