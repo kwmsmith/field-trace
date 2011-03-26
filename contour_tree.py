@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 from _graph import Graph, DiGraph
 # from networkx import Graph, DiGraph
 
