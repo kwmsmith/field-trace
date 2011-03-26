@@ -74,7 +74,7 @@ class test_contour_tree(object):
                 _nx.draw(contour_tree)
             raw_input("enter to continue")
 
-    def test_contour_tree_sparse(self):
+    def _test_contour_tree_sparse(self):
         join, join_arcs = ct.join_split_tree_sparse(self.mesh, self.height_func)
         eq_(set(join_arcs.keys()), set(self.mesh.nodes()))
         split, split_arcs = ct.join_split_tree_sparse(self.mesh, self.height_func, split=True)
@@ -135,36 +135,8 @@ class test_contour_tree(object):
             coverage.update(r)
         eq_(len(coverage), arr.size)
         regions = ct.get_regions_full(contour_tree)
-        c_tree_sparse, regions_sparse = ct.sparse_contour_tree(mesh, height_func)
-        cpts_sparse = ct.critical_points(c_tree_sparse)
-        peaks_sparse = cpts_sparse['peaks']
-        pits_sparse = cpts_sparse['pits']
-        passes_sparse = cpts_sparse['passes']
-        eq_(passes, passes_sparse)
-        eq_(peaks, peaks_sparse)
-        eq_(pits, pits_sparse)
         if 0:
             vis(arr, height_func=height_func, crit_pts=cpts, regions=regions)
-
-    def test_arr_sparse(self):
-        arr = random_periodic_upsample(self.NN, 4, seed=1)
-        mesh = ct.make_mesh(arr)
-        def height_func(n):
-            return (arr[n], n)
-        contour_tree, regions = ct.sparse_contour_tree(mesh, height_func)
-        pts_covered = set()
-        for reg in regions.values():
-            pts_covered.update(reg)
-        print "num points: %d num points covered: %d" % (arr.size, len(pts_covered))
-        cpts = ct.critical_points(contour_tree)
-        peaks = cpts['peaks']
-        passes = cpts['passes']
-        pits = cpts['pits']
-        print arr[0,0]
-        print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
-        print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
-        if 0:
-            vis(arr, height_func, cpts, regions)
 
 def vis(arr, height_func, crit_pts, regions, step=True, new_fig=False):
     filled_arr = arr.copy()

@@ -18,53 +18,6 @@ def uf_merge(uf_map, key1, key2):
     for key in keys_to_change:
         uf_map[key] = updated_set
 
-def join_split_tree_sparse(mesh, height_func, split=False):
-    join_tree = DiGraph()
-    # map of nodes to union-find set that it's in
-    uf_map = {}
-    # map from supernodes in the sparse j/s tree to all regular nodes in
-    # supernode's arc.
-    supernode_arc = {}
-    # map of union-find set id to node to connect to in set.  When a join node
-    # is created in the join_tree, connection_node_map keeps track of which
-    # node should be connected in the join_tree.
-    supernode_map = {}
-    # a list of (height, node) tuples
-    # XXX: store height_func() results in mesh?
-    height_and_nodes = [(height_func(node), node) for node in mesh.nodes()]
-    height_and_nodes.sort(reverse=not split)
-    for h, n in height_and_nodes:
-        uf_map[n] = set([n])
-        supernode_map[id(uf_map[n])] = n
-        connect_nbrs = []
-        edges = []
-        for nbr in mesh.neighbors_iter(n):
-            # XXX: remove call to height_func()
-            nbr_h = height_func(nbr)
-            if nbr_h == h:
-                raise ValueError("nbr_h == h!!!")
-            if (split and nbr_h > h) or (not split and nbr_h < h) or (uf_map[nbr] is uf_map[n]):
-                continue
-            connection_nbr_uf = supernode_map[id(uf_map[nbr])]
-            edges.append((connection_nbr_uf, n))
-            connect_nbrs.append(nbr)
-            uf_merge(uf_map, n, nbr)
-        if len(edges) == 1:
-            snode = supernode_map[id(uf_map[n])]
-            supernode_arc[n] = snode
-        elif len(edges) > 1:
-            join_tree.add_edges_from(edges)
-            for nbr in connect_nbrs:
-                supernode_map[id(uf_map[nbr])] = n
-    # add all the supernodes in the join_tree to the supernode_arcs.
-    # do this before adding the global minimum.
-    for node in join_tree.nodes():
-        supernode_arc[node] = node
-    # connect the global minimum to the join_tree's bottom
-    tree_bottom = [n for (n,d) in join_tree.out_degree().items() if d == 0][0]
-    global_min = height_and_nodes[-1][1]
-    join_tree.add_edge(tree_bottom, global_min)
-    return join_tree, supernode_arc
 
 def splice_in_node(gr, start, newnode):
     succs = gr.successors(start)
@@ -132,60 +85,6 @@ def get_regions_full(contour_tree, sparse_tree=False):
         return regions, s_tree
     else:
         return regions
-
-def get_regions_sparse(contour_tree, jnode2super, snode2super, height_func):
-    jsuper2nodes = defaultdict(list)
-    ssuper2nodes = defaultdict(list)
-    for node in sorted(jnode2super, key=height_func):
-        supern = jnode2super[node]
-        jsuper2nodes[supern].append(node)
-    for node in sorted(snode2super, key=height_func):
-        supern = snode2super[node]
-        ssuper2nodes[supern].append(node)
-    regions = {}
-    for higher_node in contour_tree.adj:
-        lower_nodes = contour_tree.successors(higher_node)
-        for lower_node in lower_nodes:
-            if higher_node in jsuper2nodes and lower_node in jsuper2nodes:
-                # all info is in the jsuper2nodes map.
-                region = jsuper2nodes[higher_node]
-            elif higher_node in ssuper2nodes and lower_node in ssuper2nodes:
-                # all info in ssuper2nodes map.
-                region = ssuper2nodes[lower_node]
-            elif higher_node in jsuper2nodes and lower_node in ssuper2nodes:
-                # region is just the tail part of jsuper2nodes[higher_node]
-                region = jsuper2nodes[higher_node]
-                lower_h = height_func(lower_node)
-                try:
-                    idx = region.index(lower_node)
-                except ValueError:
-                    assert lower_h < height_func(region[0])
-                    idx = 0
-                region = region[idx:]
-            elif higher_node in ssuper2nodes and lower_node in jsuper2nodes:
-                # the complicated case...
-                # find higher_node's superarc in jsuper2nodes
-                hsuper = jnode2super[higher_node]
-                hsuperarc = jsuper2nodes[hsuper]
-                # and lower_node's superarc in ssuper2nodes
-                lsuper = snode2super[lower_node]
-                lsuperarc = ssuper2nodes[lsuper]
-                # the region is the intersection between hsuprearc and lsuperarc
-                region = sorted(set(hsuperarc).intersection(lsuperarc), key=height_func, reverse=True)
-            regions[higher_node, lower_node] = region
-    return regions
-
-def rectify_join_split_trees(join, jarcs, split, sarcs, height_func):
-    join_nodes = set(join.nodes())
-    split_nodes = set(split.nodes())
-    if join_nodes == split_nodes:
-        return
-    join_to_add = sorted(join_nodes.difference(split_nodes), key=height_func, reverse=True)
-    split_to_add = sorted(split_nodes.difference(join_nodes), key=height_func)
-    for jn in join_to_add:
-        splice_in_node(split, sarcs[jn], jn)
-    for sn in split_to_add:
-        splice_in_node(join, jarcs[sn], sn)
 
 def join_split_tree(mesh, height_func, split=False):
     join_tree = DiGraph()
@@ -270,13 +169,6 @@ def contour_tree_from_join_split(join, split, height_func):
             leaves.append(nbr)
     return c_tree
 
-def sparse_contour_tree(mesh, height_func):
-    join, jarcs = join_split_tree_sparse(mesh, height_func, split=False)
-    split, sarcs = join_split_tree_sparse(mesh, height_func, split=True)
-    rectify_join_split_trees(join, jarcs, split, sarcs, height_func)
-    c_tree = contour_tree_from_join_split(join, split, height_func)
-    return c_tree, get_regions_sparse(c_tree, jarcs, sarcs, height_func)
-
 def contour_tree(mesh, height_func):
     join = join_split_tree(mesh, height_func, split=False)
     split = join_split_tree(mesh, height_func, split=True)
@@ -290,9 +182,21 @@ def critical_points(ctree):
     out_deg = ctree.out_degree()
     crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0])
     crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0])
-    crit_pts['passes'] = set([n for n in out_deg if out_deg[n] >= 1 and in_deg[n] >= 2] +
-                             [n for n in out_deg if out_deg[n] >= 2 and in_deg[n] >= 1])
+    crit_pts['passes'] = set([n for n in out_deg if (out_deg[n] + in_deg[n] > 2)])
     return crit_pts
+
+def _critical_points(ctree):
+    # this version is slower but could be made faster by removing
+    # ctree.in_degree() and ctree.out_degree() overhead
+    deg = ctree.degree()
+    cpts = [n for n in deg if deg[n] != 2]
+    crit_pts_dict = {}
+    in_deg = dict([(cp, ctree.in_degree(cp)) for cp in cpts])
+    out_deg = dict([(cp, ctree.out_degree(cp)) for cp in cpts])
+    peaks = crit_pts_dict['peaks'] = set([n for n in in_deg if in_deg[n] == 0])
+    pits = crit_pts_dict['pits'] = set([n for n in out_deg if out_deg[n] == 0])
+    crit_pts_dict['passes'] = set(cpts).difference(peaks.union(pits))
+    return crit_pts_dict
 
 AC = 0
 BD = 1
