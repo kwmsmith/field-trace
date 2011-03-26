@@ -1,31 +1,63 @@
 from _graph import Graph, DiGraph
 # from networkx import Graph, DiGraph
 
-def uf_merge(uf_map, key1, key2):
-    s1 = uf_map[key1]
-    s2 = uf_map[key2]
-    if len(s1) <= len(s2):
-        s2.update(s1)
-        updated_set = s2
-        keys_to_change = s1
-    else:
-        s1.update(s2)
-        updated_set = s1
-        keys_to_change = s2
-    uf_map[key1] = uf_map[key2] = updated_set
-    for key in keys_to_change:
-        uf_map[key] = updated_set
+def contour_tree(mesh, height_func):
+    join = join_split_tree(mesh, height_func, split=False)
+    split = join_split_tree(mesh, height_func, split=True)
+    c_tree = contour_tree_from_join_split(join, split, height_func)
+    supertree = augmented_tree_to_supertree(c_tree)
+    return supertree
 
+def join_split_tree(mesh, height_func, split=False):
+    join_tree = DiGraph()
+    # map of nodes to union-find set that it's in
+    uf_map = {}
+    # map of union-find set id to lowest node in the set.
+    lowest_node_map = {}
+    # a list of (height, node) tuples
+    height_and_nodes = [(height_func(node), node) for node in mesh.nodes()]
+    height_and_nodes.sort(reverse=not split)
+    for h, n in height_and_nodes:
+        uf_map[n] = set([n])
+        lowest_node_map[id(uf_map[n])] = n
+        for nbr in mesh.neighbors_iter(n):
+            nbr_h = height_func(nbr)
+            if nbr_h == h:
+                raise ValueError("nbr_h == h!!!")
+            if (split and nbr_h > h) or (not split and nbr_h < h) or (uf_map[nbr] is uf_map[n]):
+                continue
+            # uf_merge() can change the uf_map[nbr], and hence, the lowest
+            # point in nbr's union-find set. So we add the edge first before doing the
+            # union-find merge.
+            lowest_in_nbr_uf = lowest_node_map[id(uf_map[nbr])]
+            join_tree.add_edge(lowest_in_nbr_uf, n)
+            uf_merge(uf_map, n, nbr)
+            lowest_node_map[id(uf_map[nbr])] = n
+    return join_tree
 
-def splice_in_node(gr, start, newnode):
-    succs = gr.successors(start)
-    gr.add_edge(start, newnode)
-    if succs:
-        if len(succs) != 1:
-            raise ValueError("len(succs) != 1: %s" % (succs,))
-        succ = succs[0]
-        gr.add_edge(newnode, succ)
-        gr.remove_edge(start, succ)
+def contour_tree_from_join_split(join, split, height_func):
+    c_tree = DiGraph()
+    leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
+    while len(leaves) > 1:
+        leaf = leaves.pop()
+        if is_upper_leaf(leaf, join, split):
+            this = join
+            other = split
+        else:
+            this = split
+            other = join
+        this_succ = this.successors(leaf)
+        assert len(this_succ) == 1
+        nbr = this_succ[0]
+        if height_func(leaf) > height_func(nbr):
+            c_tree.add_edge(leaf, nbr)
+        else:
+            c_tree.add_edge(nbr, leaf)
+        reduce_graph(this, leaf)
+        reduce_graph(other, leaf)
+        if is_leaf(nbr, join, split):
+            leaves.append(nbr)
+    return c_tree
 
 def augmented_tree_to_supertree(contour_tree):
     '''
@@ -56,6 +88,33 @@ def augmented_tree_to_supertree(contour_tree):
     supertree = _nx.DiGraph(edge2regions)
     return supertree
 
+
+def uf_merge(uf_map, key1, key2):
+    s1 = uf_map[key1]
+    s2 = uf_map[key2]
+    if len(s1) <= len(s2):
+        s2.update(s1)
+        updated_set = s2
+        keys_to_change = s1
+    else:
+        s1.update(s2)
+        updated_set = s1
+        keys_to_change = s2
+    uf_map[key1] = uf_map[key2] = updated_set
+    for key in keys_to_change:
+        uf_map[key] = updated_set
+
+
+def splice_in_node(gr, start, newnode):
+    succs = gr.successors(start)
+    gr.add_edge(start, newnode)
+    if succs:
+        if len(succs) != 1:
+            raise ValueError("len(succs) != 1: %s" % (succs,))
+        succ = succs[0]
+        gr.add_edge(newnode, succ)
+        gr.remove_edge(start, succ)
+
 def get_regions_full(contour_tree, sparse_tree=False):
     if sparse_tree:
         s_tree = DiGraph()
@@ -83,33 +142,6 @@ def get_regions_full(contour_tree, sparse_tree=False):
         return regions, s_tree
     else:
         return regions
-
-def join_split_tree(mesh, height_func, split=False):
-    join_tree = DiGraph()
-    # map of nodes to union-find set that it's in
-    uf_map = {}
-    # map of union-find set id to lowest node in the set.
-    lowest_node_map = {}
-    # a list of (height, node) tuples
-    height_and_nodes = [(height_func(node), node) for node in mesh.nodes()]
-    height_and_nodes.sort(reverse=not split)
-    for h, n in height_and_nodes:
-        uf_map[n] = set([n])
-        lowest_node_map[id(uf_map[n])] = n
-        for nbr in mesh.neighbors_iter(n):
-            nbr_h = height_func(nbr)
-            if nbr_h == h:
-                raise ValueError("nbr_h == h!!!")
-            if (split and nbr_h > h) or (not split and nbr_h < h) or (uf_map[nbr] is uf_map[n]):
-                continue
-            # uf_merge() can change the uf_map[nbr], and hence, the lowest
-            # point in nbr's union-find set. So we add the edge first before doing the
-            # union-find merge.
-            lowest_in_nbr_uf = lowest_node_map[id(uf_map[nbr])]
-            join_tree.add_edge(lowest_in_nbr_uf, n)
-            uf_merge(uf_map, n, nbr)
-            lowest_node_map[id(uf_map[nbr])] = n
-    return join_tree
 
 def join_split_peak_pit_nodes(join):
     in_deg = join.in_degree()
@@ -142,37 +174,6 @@ def reduce_graph(graph, node):
         assert len(succs) == 1
         graph.remove_edge(node, succs[0])
     graph.remove_node(node)
-
-def contour_tree_from_join_split(join, split, height_func):
-    c_tree = DiGraph()
-    leaves = join_split_peak_pit_nodes(join) + join_split_peak_pit_nodes(split)
-    while len(leaves) > 1:
-        leaf = leaves.pop()
-        if is_upper_leaf(leaf, join, split):
-            this = join
-            other = split
-        else:
-            this = split
-            other = join
-        this_succ = this.successors(leaf)
-        assert len(this_succ) == 1
-        nbr = this_succ[0]
-        if height_func(leaf) > height_func(nbr):
-            c_tree.add_edge(leaf, nbr)
-        else:
-            c_tree.add_edge(nbr, leaf)
-        reduce_graph(this, leaf)
-        reduce_graph(other, leaf)
-        if is_leaf(nbr, join, split):
-            leaves.append(nbr)
-    return c_tree
-
-def contour_tree(mesh, height_func):
-    join = join_split_tree(mesh, height_func, split=False)
-    split = join_split_tree(mesh, height_func, split=True)
-    c_tree = contour_tree_from_join_split(join, split, height_func)
-    supertree = augmented_tree_to_supertree(c_tree)
-    return supertree
 
 def critical_points(ctree):
     crit_pts = {}
