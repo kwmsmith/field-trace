@@ -274,7 +274,7 @@ def get_edge_region(c_tree, edge):
 def set_edge_region(c_tree, edge, region):
     c_tree.edge[edge[0]][edge[1]]['arc'] = region
 
-def remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf, already_collapsed, cb=None):
+def remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf):
     p_edges = pred_edges(c_tree, interior)
     s_edges = succ_edges(c_tree, interior)
     if leaf_edge in p_edges:
@@ -288,7 +288,6 @@ def remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf, already_collaps
     c_tree.remove_edge(*leaf_edge)
     c_tree.remove_node(leaf)
     set_edge_region(c_tree, sibling, sib_region.union(leaf_region))
-    already_collapsed.add(leaf_edge)
 
 def is_regular_node(c_tree, node):
     return c_tree.in_degree(node) == 1 and c_tree.out_degree(node) == 1
@@ -310,12 +309,13 @@ def node_collapse_merge_regions(c_tree, interior, already_collapsed):
     already_collapsed.add(s_edge)
     return new_edge
 
-def prune_regions(c_tree, region_func, threshold, height_func):
+def prune_regions(c_tree, region_func, threshold, height_func, remove_edge_cb=None):
     '''
     prunes all edges in the supertree c_tree that have
     region_func(edge region) <= threshold.
 
     '''
+    remove_edge_cb = remove_edge_cb or (lambda *args: None)
     import heapq
     # load up queue
     already_collapsed = set()
@@ -332,7 +332,8 @@ def prune_regions(c_tree, region_func, threshold, height_func):
         interior, leaf = interior_exterior(c_tree, leaf_edge)
         if is_last_up_down(c_tree, leaf_edge, interior):
             continue
-        remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf, already_collapsed)
+        remove_edge_cb(get_edge_region(c_tree, leaf_edge), interior, leaf)
+        remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf)
         collapse_record.append(leaf_edge)
         if is_regular_node(c_tree, interior):
             new_leaf_edge = node_collapse_merge_regions(c_tree, interior, already_collapsed)

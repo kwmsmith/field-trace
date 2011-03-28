@@ -152,7 +152,7 @@ class test_contour_tree(object):
 
     NN = 32
     def test_arr_full(self):
-        arr = random_periodic_upsample(self.NN, 2, seed=1)
+        arr = random_periodic_upsample(self.NN, 4, seed=1)
         for _ in range(4):
             _set_nbr_height_equal(arr)
         mesh = ct.make_mesh(arr)
@@ -161,11 +161,19 @@ class test_contour_tree(object):
         def region_func(r):
             hs = [height_func(p) for p in r]
             return max(hs)[0] - min(hs)[0]
+        def region_area_func(r):
+            return len(r)
         contour_tree = ct.contour_tree(mesh, height_func)
+        def remove_edge_cb(region, interior, leaf):
+            h = height_func(interior)[0]
+            for pt in region:
+                arr[pt] = h
         ct.prune_regions(contour_tree,
-                region_func=region_func,
-                threshold=(arr.max()-arr.min())/2.0,
-                height_func=height_func)
+                region_func=region_area_func,
+                # threshold=(arr.max()-arr.min())/4.0,
+                threshold=3,
+                height_func=height_func,
+                remove_edge_cb=remove_edge_cb)
         cpts = ct.critical_points(contour_tree)
         peaks = cpts.peaks
         passes = cpts.passes
@@ -185,12 +193,12 @@ def vis(arr, height_func, crit_pts, regions, step=True, new_fig=False):
     filled_arr = arr.copy()
     def hf((a,b)): return height_func(a), height_func(b)
     for region in sorted(regions, key=hf, reverse=True):
-        X = [_[0] for _ in regions[region]]
-        Y = [_[1] for _ in regions[region]]
-        filled_arr[X,Y] = 2*arr.max()
         if step:
             visualize(filled_arr, crit_pts=crit_pts, ncontours=None, cmap='gray', new_fig=new_fig)
             raw_input("enter to continue")
+        X = [_[0] for _ in regions[region]]
+        Y = [_[1] for _ in regions[region]]
+        filled_arr[X,Y] = 2*arr.max()
     if not step:
         visualize(filled_arr, crit_pts=crit_pts, ncontours=None, cmap='gray', new_fig=True)
         raw_input("enter to continue")
