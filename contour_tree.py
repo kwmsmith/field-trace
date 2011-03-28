@@ -68,9 +68,9 @@ def augmented_tree_to_supertree(contour_tree):
     '''
     import networkx as _nx
     cpts = critical_points(contour_tree)
-    peaks = cpts['peaks']
-    pits = cpts['pits']
-    passes = cpts['passes']
+    peaks = cpts.peaks
+    pits = cpts.pits
+    passes = cpts.passes
     cpts_flat = set(peaks.union(pits).union(passes))
     edge2regions = []
     for cpt in cpts_flat:
@@ -113,33 +113,9 @@ def splice_in_node(gr, start, newnode):
         gr.add_edge(newnode, succ)
         gr.remove_edge(start, succ)
 
-def get_regions_full(contour_tree, sparse_tree=False):
-    if sparse_tree:
-        s_tree = DiGraph()
-    cpts = critical_points(contour_tree)
-    peaks = cpts['peaks']
-    pits = cpts['pits']
-    passes = cpts['passes']
-    cpts_flat = set(peaks.union(pits).union(passes))
-    regions = {}
-    for cpt in cpts_flat:
-        for lower_nbr in contour_tree.successors(cpt):
-            region = [cpt]
-            cur = lower_nbr
-            # if not isinstance(cpt, tuple):
-                # import pdb; pdb.set_trace()
-            while cur not in cpts_flat:
-                region.append(cur)
-                cur = contour_tree.successors(cur)[0]
-            # add the last point
-            region.append(cur)
-            regions[(cpt, cur)] = region
-            if sparse_tree:
-                s_tree.add_edge(cpt, cur)
-    if sparse_tree:
-        return regions, s_tree
-    else:
-        return regions
+def get_regions(contour_tree):
+    regions = dict([((n1, n2), D['arc']) for (n1, n2, D) in contour_tree.edges_iter(data=True)])
+    return regions
 
 def join_split_peak_pit_nodes(join):
     in_deg = join.in_degree()
@@ -174,13 +150,15 @@ def reduce_graph(graph, node):
     graph.remove_node(node)
 
 def critical_points(ctree):
-    crit_pts = {}
+    from collections import namedtuple
+    crit_pts = namedtuple('crit_pts', 'peaks passes pits')
     in_deg = ctree.in_degree()
     out_deg = ctree.out_degree()
-    crit_pts['peaks']  = set([n for n in in_deg if in_deg[n] == 0])
-    crit_pts['pits']   = set([n for n in out_deg if out_deg[n] == 0])
-    crit_pts['passes'] = set([n for n in out_deg if (out_deg[n] + in_deg[n] > 2)])
-    return crit_pts
+    return crit_pts(
+            peaks = set([n for n in in_deg if in_deg[n] == 0]),
+            pits = set([n for n in out_deg if out_deg[n] == 0]),
+            passes = set([n for n in out_deg if (out_deg[n] + in_deg[n] > 2)]),
+            )
 
 def _critical_points(ctree):
     # this version is slower but could be made faster by removing
@@ -345,7 +323,7 @@ def prune_regions(c_tree, region_func, threshold, height_func):
     leaf_edges = get_leaf_edges(c_tree)
     leaf_edges = [(region_func(D['arc']), (n1, n2)) for (n1, n2, D) in leaf_edges]
     heapq.heapify(leaf_edges)
-    while leaf_edges:
+    while leaf_edges and len(c_tree) > 2:
         priority, leaf_edge = heapq.heappop(leaf_edges)
         if priority > threshold:
             return

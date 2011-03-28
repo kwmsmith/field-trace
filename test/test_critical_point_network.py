@@ -99,7 +99,7 @@ def visualize(arr, mesh=None, crit_pts=None, surf_network=None, cmap=None, ncont
                 nbr_x, nbr_y = nbr
                 pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--')
     if crit_pts is not None:
-        pits, passes, peaks = crit_pts['pits'], crit_pts['passes'], crit_pts['peaks']
+        pits, passes, peaks = crit_pts.pits, crit_pts.passes, crit_pts.peaks
         X = [_[0] for _ in pits]
         Y = [_[1] for _ in pits]
         pl.scatter(Y, X, marker='o', c='b', s=50)

@@ -4,7 +4,7 @@ from random import randint
 
 import contour_tree as ct
 
-from nose.tools import eq_, set_trace
+from nose.tools import eq_, ok_, set_trace
 
 from test_critical_point_network import random_periodic_upsample, visualize
 
@@ -27,17 +27,37 @@ class test_prune_regions(object):
 
     def test_prune_regions(self):
         contour_tree = ct.contour_tree(self.mesh, self.height_func)
+        crit_pts0 = ct.critical_points(contour_tree)
+        pits, passes, peaks = crit_pts0.pits, crit_pts0.passes, crit_pts0.peaks
+        regions = ct.get_regions(contour_tree)
+        domain = set()
+        for r in regions.values():
+            domain.update(r)
         ctree_copy = contour_tree.copy()
-        ct.prune_regions(contour_tree, region_func=self.region_func, threshold=3, height_func=self.height_func)
-        if 0:
-            import pylab as pl
-            pl.ion()
-            _nx.draw(ctree_copy)
-            pl.figure()
-            _nx.draw(contour_tree)
-            raw_input("enter to continue")
-        set_trace()
-        eq_(ctree_copy.adj, contour_tree.adj)
+        thresh = 0
+        while len(contour_tree) > 2:
+            ct.prune_regions(contour_tree, region_func=self.region_func, threshold=thresh, height_func=self.height_func)
+            regions = ct.get_regions(contour_tree)
+            domain_pruned = set()
+            for r in regions.values():
+                domain_pruned.update(r)
+            pruned_crit_pts = ct.critical_points(contour_tree)
+            ppeaks = pruned_crit_pts.peaks
+            ppits = pruned_crit_pts.pits
+            ppasses = pruned_crit_pts.passes
+            eq_(domain, domain_pruned)
+            eq_(len(ppeaks)+len(ppits)-len(ppasses), len(pits)+len(peaks)-len(passes))
+            ok_(ppeaks <= peaks)
+            ok_(ppasses <= passes)
+            ok_(ppits <= pits)
+            if 0:
+                import pylab as pl
+                pl.ion()
+                _nx.draw(ctree_copy)
+                pl.figure()
+                _nx.draw(contour_tree)
+                raw_input("enter to continue")
+            thresh += 1
 
 class test_contour_tree(object):
 
@@ -77,18 +97,13 @@ class test_contour_tree(object):
         split = ct.join_split_tree(self.mesh, self.height_func, split=True)
         contour_tree = ct.contour_tree(self.mesh, self.height_func)
         crit_pts = ct.critical_points(contour_tree)
-        eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
-        eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
-        eq_(sorted(crit_pts['passes']), sorted([3, 4, 5, 6]))
-        regions, sparse_tree = ct.get_regions_full(contour_tree, sparse_tree=True)
+        eq_(sorted(crit_pts.peaks), sorted(ct.join_split_peak_pit_nodes(join)))
+        eq_(sorted(crit_pts.pits), sorted(ct.join_split_peak_pit_nodes(split)))
+        eq_(sorted(crit_pts.passes), sorted([3, 4, 5, 6]))
 
         if 0:
             import pylab as pl
             pl.ion()
-            try:
-                _nx.draw(sparse_tree.to_networkx())
-            except AttributeError:
-                _nx.draw(sparse_tree)
             pl.figure()
             try:
                 _nx.draw(contour_tree.to_networkx())
@@ -105,9 +120,9 @@ class test_contour_tree(object):
         eq_(sorted(join.nodes()), sorted(split.nodes()))
         contour_tree, regions = ct.sparse_contour_tree(self.mesh, self.height_func)
         crit_pts = ct.critical_points(contour_tree)
-        eq_(sorted(crit_pts['peaks']), sorted(ct.join_split_peak_pit_nodes(join)))
-        eq_(sorted(crit_pts['pits']), sorted(ct.join_split_peak_pit_nodes(split)))
-        eq_(sorted(crit_pts['passes']), sorted([3, 4, 5, 6]))
+        eq_(sorted(crit_pts.peaks), sorted(ct.join_split_peak_pit_nodes(join)))
+        eq_(sorted(crit_pts.pits), sorted(ct.join_split_peak_pit_nodes(split)))
+        eq_(sorted(crit_pts.passes), sorted([3, 4, 5, 6]))
         if 0:
             import pylab as pl
             pl.ion()
@@ -137,34 +152,39 @@ class test_contour_tree(object):
 
     NN = 32
     def test_arr_full(self):
-        arr = random_periodic_upsample(self.NN, 4, seed=1)
+        arr = random_periodic_upsample(self.NN, 2, seed=1)
         for _ in range(4):
             _set_nbr_height_equal(arr)
         mesh = ct.make_mesh(arr)
         def height_func(n):
             return (arr[n], n)
+        def region_func(r):
+            hs = [height_func(p) for p in r]
+            return max(hs)[0] - min(hs)[0]
         contour_tree = ct.contour_tree(mesh, height_func)
+        ct.prune_regions(contour_tree,
+                region_func=region_func,
+                threshold=(arr.max()-arr.min())/2.0,
+                height_func=height_func)
         cpts = ct.critical_points(contour_tree)
-        peaks = cpts['peaks']
-        passes = cpts['passes']
-        pits = cpts['pits']
+        peaks = cpts.peaks
+        passes = cpts.passes
+        pits = cpts.pits
         print "peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         print "len(crit_pts) = %d" % (len(peaks) + len(pits) + len(passes))
         print 'tot points covered: %d' % len(contour_tree)
         coverage = set()
-        regions = [D['arc'] for (n1, n2, D) in contour_tree.edges_iter(data=True)]
-        for r in regions:
+        regions = ct.get_regions(contour_tree)
+        for r in regions.values():
             coverage.update(r)
         eq_(len(coverage), arr.size)
-        regions = ct.get_regions_full(contour_tree)
-        if 0:
+        if 1:
             vis(arr, height_func=height_func, crit_pts=cpts, regions=regions)
 
 def vis(arr, height_func, crit_pts, regions, step=True, new_fig=False):
     filled_arr = arr.copy()
     def hf((a,b)): return height_func(a), height_func(b)
     for region in sorted(regions, key=hf, reverse=True):
-        # filled_arr = arr.copy()
         X = [_[0] for _ in regions[region]]
         Y = [_[1] for _ in regions[region]]
         filled_arr[X,Y] = 2*arr.max()
