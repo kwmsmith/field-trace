@@ -75,15 +75,15 @@ def augmented_tree_to_supertree(contour_tree):
     edge2regions = []
     for cpt in cpts_flat:
         for lower_nbr in contour_tree.successors(cpt):
-            region = [cpt]
+            region = set([cpt])
             cur = lower_nbr
             # if not isinstance(cpt, tuple):
                 # import pdb; pdb.set_trace()
             while cur not in cpts_flat:
-                region.append(cur)
+                region.add(cur)
                 cur = contour_tree.successors(cur)[0]
             # add the last point
-            region.append(cur)
+            region.add(cur)
             edge2regions.append((cpt, cur, dict(arc=region)))
     supertree = _nx.DiGraph(edge2regions)
     return supertree
@@ -242,21 +242,28 @@ def connect_diagonal(a, b, c, d):
     return envelope(a, b, c, d)
     # return AC
 
-def get_leaf_edges(c_tree):
+def get_leaf_edges(c_tree, data=True):
     in_deg = c_tree.in_degree()
     out_deg = c_tree.out_degree()
-    leaves = {
-            'upper': set([(n, c_tree.successors(n)[0]) for n in in_deg if in_deg[n] == 0]),
-            'lower': set([(c_tree.predecessors(n)[0], n) for n in out_deg if out_deg[n] == 0]),
-            }
-    return leaves
+    edges = []
+    for e in c_tree.edges_iter(data=data):
+        if data:
+            n1, n2, d = e
+        else:
+            n1, n2 = e
+        if in_deg[n1] == 0:
+            edges.append(e)
+        if out_deg[n2] == 0:
+            edges.append(e)
+    return edges
 
-def interior_exterior(n1, n2, ctree):
-    if ctree.in_degree(n1) == 0 or ctree.out_degree(n1) == 0:
+def interior_exterior(c_tree, edge):
+    n1, n2 = edge
+    if c_tree.in_degree(n1) == 0 or c_tree.out_degree(n1) == 0:
         # n1 is exterior
         # n2 is interior
         return (n2, n1)
-    elif ctree.in_degree(n2) == 0 or ctree.out_degree(n2) == 0:
+    elif c_tree.in_degree(n2) == 0 or c_tree.out_degree(n2) == 0:
         # flip
         return (n1, n2)
     else:
@@ -270,19 +277,60 @@ def is_lower_edge(c_tree, edge):
 
 def is_last_up_down(c_tree, edge, interior_node):
     # can be sped up, I'm sure...
-    if (c_tree.in_degree(interior_node) == 1 and is_upper_edge(c_tree, edge) or 
-            (c_tree.out_degree(interior_node) == 1 and is_lower_edge(c_tree, edge))):
+    if ((c_tree.in_degree(interior_node) == 1  and is_upper_edge(c_tree, edge)) or 
+        (c_tree.out_degree(interior_node) == 1 and is_lower_edge(c_tree, edge))):
         return True
     return False
 
-def remove_edge_merge_regions(c_tree, leaf_edge):
-    pass
+def pred_edges(c_tree, node):
+    pes = set([(n, node) for n in c_tree.pred[node]])
+    return pes
+
+def succ_edges(c_tree, node):
+    ses = set([(node, n) for n in c_tree.succ[node]])
+    return ses
+
+def get_edge_region(c_tree, edge):
+    return c_tree.edge[edge[0]][edge[1]]['arc']
+
+def set_edge_region(c_tree, edge, region):
+    c_tree.edge[edge[0]][edge[1]]['arc'] = region
+
+def remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf, already_collapsed, cb=None):
+    p_edges = pred_edges(c_tree, interior)
+    s_edges = succ_edges(c_tree, interior)
+    if leaf_edge in p_edges:
+        p_edges.remove(leaf_edge)
+        sibling = p_edges.pop()
+    elif leaf_edge in s_edges:
+        s_edges.remove(leaf_edge)
+        sibling = s_edges.pop()
+    leaf_region = get_edge_region(c_tree, leaf_edge)
+    sib_region = get_edge_region(c_tree, sibling)
+    c_tree.remove_edge(*leaf_edge)
+    c_tree.remove_node(leaf)
+    set_edge_region(c_tree, sibling, sib_region.union(leaf_region))
+    already_collapsed.add(leaf_edge)
 
 def is_regular_node(c_tree, node):
     return c_tree.in_degree(node) == 1 and c_tree.out_degree(node) == 1
 
-def node_collapse_merge_regions(interior, c_tree):
-    pass
+def node_collapse_merge_regions(c_tree, interior, already_collapsed):
+    p_edges = pred_edges(c_tree, interior)
+    s_edges = succ_edges(c_tree, interior)
+    assert len(p_edges) == len(s_edges) == 1
+    p_edge = p_edges.pop()
+    s_edge = s_edges.pop()
+    assert p_edge[1] == s_edge[0] == interior
+    p_region = get_edge_region(c_tree, p_edge)
+    s_region = get_edge_region(c_tree, s_edge)
+    new_region = p_region.union(s_region)
+    new_edge = p_edge[0], s_edge[1]
+    c_tree.remove_node(interior)
+    c_tree.add_edge(*new_edge, arc=new_region)
+    already_collapsed.add(p_edge)
+    already_collapsed.add(s_edge)
+    return new_edge
 
 def prune_regions(c_tree, region_func, threshold, height_func):
     '''
@@ -295,24 +343,22 @@ def prune_regions(c_tree, region_func, threshold, height_func):
     already_collapsed = set()
     collapse_record = []
     leaf_edges = get_leaf_edges(c_tree)
-    leaf_edges = [(region_func(D['arc']), le) for le,D in c_tree.edges_iter(leaf_edges)]
-    leaf_edges = heapq.heapify(leaf_edges)
+    leaf_edges = [(region_func(D['arc']), (n1, n2)) for (n1, n2, D) in leaf_edges]
+    heapq.heapify(leaf_edges)
     while leaf_edges:
         priority, leaf_edge = heapq.heappop(leaf_edges)
         if priority > threshold:
             return
-        if leaf_edges in already_collapsed:
+        if leaf_edge in already_collapsed:
             continue
-        interior, leaf = interior_exterior(leaf_edge[0], leaf_edge[1], c_tree)
+        interior, leaf = interior_exterior(c_tree, leaf_edge)
         if is_last_up_down(c_tree, leaf_edge, interior):
             continue
-        # remove leaf_edge from c_tree
-        remove_edge_merge_regions(c_tree, leaf_edge)
+        remove_edge_merge_regions(c_tree, leaf_edge, interior, leaf, already_collapsed)
         collapse_record.append(leaf_edge)
-        # if interior is a regular vertex:
         if is_regular_node(c_tree, interior):
-            new_leaf_edge = node_collapse_merge_regions(interior, c_tree)
-            if is_upper_edge(new_leaf_edge) or is_lower_edge(new_leaf_edge):
+            new_leaf_edge = node_collapse_merge_regions(c_tree, interior, already_collapsed)
+            if is_upper_edge(c_tree, new_leaf_edge) or is_lower_edge(c_tree, new_leaf_edge):
                 u,v = new_leaf_edge
-                region = c_tree.edge[u][v]
+                region = get_edge_region(c_tree, new_leaf_edge)
                 heapq.heappush(leaf_edges, (region_func(region), new_leaf_edge))

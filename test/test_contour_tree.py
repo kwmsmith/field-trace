@@ -17,6 +17,28 @@ def _set_nbr_height_equal(arr):
     vavg = 0.5 * (v1+v2)
     arr[xeq, yeq] = arr[xeq, yeq+1] = vavg
 
+class test_prune_regions(object):
+
+    def setUp(self):
+        self.mesh = ct.Graph()
+        self.mesh.add_edges_from(mesh_edges)
+        self.height_func = lambda n: n
+        self.region_func = lambda n: len(n)
+
+    def test_prune_regions(self):
+        contour_tree = ct.contour_tree(self.mesh, self.height_func)
+        ctree_copy = contour_tree.copy()
+        ct.prune_regions(contour_tree, region_func=self.region_func, threshold=3, height_func=self.height_func)
+        if 0:
+            import pylab as pl
+            pl.ion()
+            _nx.draw(ctree_copy)
+            pl.figure()
+            _nx.draw(contour_tree)
+            raw_input("enter to continue")
+        set_trace()
+        eq_(ctree_copy.adj, contour_tree.adj)
+
 class test_contour_tree(object):
 
     def setUp(self):
