@@ -8,6 +8,9 @@ from nose.tools import eq_, ok_, set_trace
 
 from test_critical_point_network import random_periodic_upsample, visualize
 
+import pylab as pl
+pl.ion()
+
 def _set_nbr_height_equal(arr):
     nx, ny = arr.shape
     xeq = randint(1, nx-2)
@@ -16,6 +19,37 @@ def _set_nbr_height_equal(arr):
     v2 = arr[xeq, yeq+1]
     vavg = 0.5 * (v1+v2)
     arr[xeq, yeq] = arr[xeq, yeq+1] = vavg
+
+class test_hierarchical_cluster(object):
+    
+    def setUp(self):
+        self.seed_pts = [(0,0), (1,1), (0,1), (511, 511),
+                         (255, 255), (255, 256),
+                         (511, 0), (510, 3),
+                         (0, 511),
+                         (511, 256), (0, 256),
+                         (256, 511), (256, 0),
+                         ]
+        self.nx = self.ny = 512
+
+    def test_hc(self):
+        Z = ct.hierarchical_cluster(self.seed_pts, self.nx, self.ny)
+        clusters = ct.fclusters(Z, self.seed_pts, nclusters=4)
+        eq_(clusters,
+                [
+                set([(255, 256), (255, 255)]),
+                set([(256, 0), (256, 511)]),
+                set([(0, 256), (511, 256)]),
+                set([(0, 1), (0, 0), (510, 3), (511, 511), (0, 511), (511, 0), (1, 1)]),
+                ])
+
+    def test_bounding_box(self):
+        Z = ct.hierarchical_cluster(self.seed_pts, self.nx, self.ny)
+        clusters = ct.fclusters(Z, self.seed_pts, nclusters=4)
+        bbs = []
+        for cluster in clusters:
+            bbs.append(ct.bounding_box(cluster, self.nx, self.ny))
+        set_trace()
 
 class test_prune_regions(object):
 
@@ -36,7 +70,7 @@ class test_prune_regions(object):
         ctree_copy = contour_tree.copy()
         thresh = 0
         while len(contour_tree) > 2:
-            ct.prune_regions(contour_tree, region_func=self.region_func, threshold=thresh, height_func=self.height_func)
+            ct.prune_regions(contour_tree, region_func=self.region_func, threshold=thresh)
             regions = ct.get_regions(contour_tree)
             domain_pruned = set()
             for r in regions.values():
@@ -172,7 +206,6 @@ class test_contour_tree(object):
                 region_func=region_area_func,
                 # threshold=(arr.max()-arr.min())/4.0,
                 threshold=3,
-                height_func=height_func,
                 remove_edge_cb=remove_edge_cb)
         cpts = ct.critical_points(contour_tree)
         peaks = cpts.peaks
@@ -186,7 +219,7 @@ class test_contour_tree(object):
         for r in regions.values():
             coverage.update(r)
         eq_(len(coverage), arr.size)
-        if 1:
+        if 0:
             vis(arr, height_func=height_func, crit_pts=cpts, regions=regions)
 
 def vis(arr, height_func, crit_pts, regions, step=True, new_fig=False):

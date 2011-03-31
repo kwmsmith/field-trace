@@ -1,6 +1,7 @@
 from __future__ import print_function
 import tables
 from sys import getsizeof
+import pickle
 
 from wrap_gsl_interp2d import Interp2DPeriodic
 
@@ -13,7 +14,7 @@ from itertools import izip
 from test_critical_point_network import visualize
 
 import pylab as pl
-pl.ion()
+
 
 def nth_timeslice(h5file, gpname, n):
     if isinstance(h5file, tables.file.File):
@@ -23,16 +24,21 @@ def nth_timeslice(h5file, gpname, n):
     gp = dta.getNode('/%s' % gpname)
     children = gp._v_children.keys()
     nth_ch = sorted(children)[n]
-    return gp._v_children[nth_ch]
+    arr = gp._v_children[nth_ch].read()
+    dta.close()
+    return arr
 
-def h5_gen(h5file, gpname):
+def h5_gen(h5file, gpnames):
+    if isinstance(gpnames, basestring):
+        gpnames = (gpnames,)
     if isinstance(h5file, tables.file.File):
         dta = h5file
     elif isinstance(h5file, basestring):
         dta = tables.openFile(h5file, mode='r')
-    gp = dta.getNode('/%s' % gpname)
-    for arr in gp:
-        yield arr
+    gps = [dta.getNode('/%s' % gpname) for gpname in gpnames]
+    for arrs in izip(*gps):
+        aas = [arr.read() for arr in arrs]
+        yield aas
     dta.close()
 
 # psi_arrs = [arr.read() for arr in h5_gen('data.h5', 'psi')]
@@ -287,19 +293,15 @@ def logger(ss, newline=True):
         stderr.write('\n')
 
 def test_contour_tree():
-    for n in (0, -1):
-        psi_arr = nth_timeslice('data.h5', 'psi', n=n)
-        bx_arr = nth_timeslice('data.h5', 'bx', n=n)
-        by_arr = nth_timeslice('data.h5', 'by', n=n)
-        bx = bx_arr.read()
-        by = by_arr.read()
-        b_mag = np.sqrt(bx**2 + by**2)
-        arr = psi_arr.read()
-        logger("array memory size: %d" % arr.nbytes)
+    ctr = 0
+    flux_tube_areas_record = []
+    for bx_arr, by_arr, psi_arr in h5_gen('data.h5', ('bx', 'by', 'psi')):
+        b_mag = np.sqrt(bx_arr**2 + by_arr**2)
+        logger("array memory size: %d" % psi_arr.nbytes)
         def height_func(n):
-            return (arr[n], n)
+            return (psi_arr[n], n)
         logger("meshing array...")
-        mesh = ct.make_mesh(arr)
+        mesh = ct.make_mesh(psi_arr)
         logger("done")
         logger("mesh memory size: %d" % total_graph_memory(mesh))
 
@@ -307,17 +309,47 @@ def test_contour_tree():
         c_tree = ct.contour_tree(mesh, height_func)
         logger("done")
 
-        logger("computing regions...")
-        regions = ct.get_regions_full(c_tree)
+        def region_func(r):
+            return len(r)
+
+        logger("pruning small regions...")
+        ct.prune_regions(
+                c_tree,
+                region_func=region_func,
+                threshold=3,
+                )
         logger("done")
 
         logger("computing critical points...")
         cpts = ct.critical_points(c_tree)
         logger("done")
 
-        peaks = cpts['peaks']
-        passes = cpts['passes']
-        pits = cpts['pits']
+        logger("condensing small regions...")
+        ct.prune_regions(
+                c_tree,
+                region_func=region_func,
+                threshold=psi_arr.size/200,
+                )
+        logger("done")
+
+        logger("computing regions...")
+        regions = ct.get_regions(c_tree)
+        logger("done")
+
+        flux_tubes = ct.get_flux_tubes(c_tree)
+        flux_tube_areas = np.array([len(ft) for (e, ft) in flux_tubes], dtype=np.int64)
+        flux_tube_areas_record.append(flux_tube_areas)
+
+        pickle.dump(flux_tube_areas_record, open('flux_tube_areas.dat', 'wb'))
+
+        flux_tube_mask = np.zeros(psi_arr.shape, dtype=np.bool_)
+        for (e, ft) in flux_tubes:
+            for p in ft:
+                flux_tube_mask[p] = True
+
+        peaks = cpts.peaks
+        passes = cpts.passes
+        pits = cpts.pits
         all_cpts = peaks.union(passes).union(pits)
 
         logger("peaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes)))
@@ -329,20 +361,29 @@ def test_contour_tree():
         logger("b_mag.max()=%f" % b_mag.max())
         logger("b_mag.min()=%f" % b_mag.min())
         if 1:
-            import pylab as pl
             pl.figure()
             pl.hist(cpt_grads, bins=pl.sqrt(len(cpt_grads)))
             pl.title("cpoint gradient values")
-            raw_input("enter to continue")
+            pl.figure()
+            pl.hist(flux_tube_areas, bins=pl.sqrt(len(flux_tube_areas)))
+            pl.title("flux tube areas")
+            pl.figure()
+            filled_arr = psi_arr.copy()
+            filled_arr[flux_tube_mask] = 2*psi_arr.max()
+            visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='hot', new_fig=False, save_fig='psi_flux_tubes%03d' % ctr)
+            pl.figure()
+            filled_arr = b_mag.copy()
+            filled_arr[flux_tube_mask] = 2*b_mag.max()
+            visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='hot', new_fig=False, save_fig='b_mag_flux_tubes%03d' % ctr)
             pl.close('all')
             if 0:
-                filled_arr = arr.copy()
+                filled_arr = psi_arr.copy()
                 def hf((a,b)): return height_func(a), height_func(b)
                 ctr = 0
                 for region in sorted(regions, key=hf, reverse=True):
                     X = [_[0] for _ in regions[region]]
                     Y = [_[1] for _ in regions[region]]
-                    filled_arr[X,Y] = 2*arr.max()
+                    filled_arr[X,Y] = 2*psi_arr.max()
                     if not ctr:
                         visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
                         raw_input("enter to continue")
@@ -351,10 +392,12 @@ def test_contour_tree():
                 visualize(filled_arr, crit_pts=cpts, ncontours=None, cmap='gray', new_fig=False)
                 raw_input("enter to continue")
                 pl.close('all')
+        ctr += 1
 
         del c_tree
         del regions
         del cpts
+
 
 test_contour_tree()
 

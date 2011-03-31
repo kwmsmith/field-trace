@@ -8,7 +8,6 @@ from numpy.linalg import LinAlgError
 from kaw_analysis import vcalc
 from wrap_gsl_interp2d import Interp2DPeriodic
 
-from nose.tools import set_trace
 
 import _field_trace
 
@@ -126,7 +125,7 @@ def is_null(xs, ys):
     return True
 
 def grad_zero_broyden(dd, xin, yin):
-    from scipy.optimize import broyden2, broyden3
+    from scipy.optimize import broyden3
     def __eval__(X):
         return (dd.perp_deriv1_interp.eval(*X), dd.perp_deriv2_interp.eval(*X))
     return broyden3(__eval__, (xin, yin), iter=10)
@@ -239,7 +238,6 @@ def marked_to_mask(shape, marked):
     return mask
 
 def _level_set(arr, level_val, position):
-    from collections import deque
     nx, ny = arr.shape
     larr = arr - level_val # leveled array
     i0, j0 = int(position[0]) % nx, int(position[1]) % ny
@@ -325,7 +323,6 @@ def connected_component_label(arr, output=None):
 
     '''
     from scipy.ndimage import label
-    from collections import defaultdict
 
     if output is not None:
         larr = output
@@ -433,7 +430,6 @@ def get_nulls(arr):
 
 def nulls_and_regions(arr, chatty=False):
     arr = np.asanyarray(arr, dtype=np.double)
-    N = arr.shape[0]
     dd = Derivator(arr)
     if chatty:
         print "%s: locating nulls" % (time.asctime())

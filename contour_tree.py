@@ -1,3 +1,5 @@
+import numpy as np
+import heapq
 from _graph import Graph, DiGraph
 # from networkx import Graph, DiGraph
 
@@ -309,14 +311,13 @@ def node_collapse_merge_regions(c_tree, interior, already_collapsed):
     already_collapsed.add(s_edge)
     return new_edge
 
-def prune_regions(c_tree, region_func, threshold, height_func, remove_edge_cb=None):
+def prune_regions(c_tree, region_func, threshold, remove_edge_cb=None):
     '''
     prunes all edges in the supertree c_tree that have
     region_func(edge region) <= threshold.
 
     '''
     remove_edge_cb = remove_edge_cb or (lambda *args: None)
-    import heapq
     # load up queue
     already_collapsed = set()
     collapse_record = []
@@ -341,3 +342,88 @@ def prune_regions(c_tree, region_func, threshold, height_func, remove_edge_cb=No
                 u,v = new_leaf_edge
                 region = get_edge_region(c_tree, new_leaf_edge)
                 heapq.heappush(leaf_edges, (region_func(region), new_leaf_edge))
+
+def get_flux_tubes(c_tree):
+    leaf_edges = get_leaf_edges(c_tree)
+    leaf_edges = [((n1,n2), D['arc']) for (n1, n2, D) in leaf_edges]
+    return leaf_edges
+
+def flux_tube_radial_profile(flux_tube_region, min_max_pt, arr, other_arr=None):
+    from field_trace import _level_set
+    other_arr = other_arr or arr
+    nx, ny = arr.shape
+    # get seed points
+    seed_points = []
+    cur = min_max_pt
+    radial_profile = {}
+    while cur in flux_tube_region:
+        seed_points.append(cur)
+        cur = (cur[0], (cur[1]+1)%ny)
+    for seed in seed_points:
+        seed_flux = arr[seed]
+        lset = _level_set(arr, level_val=seed_flux, position=seed)
+        lset_avg = other_arr[lset.xs, lset.ys].mean()
+        radial_profile[seed] = (seed_flux, lset_avg)
+    return radial_profile
+
+def growth_tree(mesh, seed_pts):
+    growth_tree = DiGraph()
+    regions = [(set([seed_pt]), set([seed_pt])) for seed_pt in seed_pts]
+    last_region_pt = {}
+    # pt2frontier = {}
+    # for seed_pt in seed_pts:
+        # pt2frontier[seed_pt] = set([seed_pt])
+    region_queue = heapq.heapify([(len(reg), reg, front) for reg,front in regions])
+    for tt in region_queue:
+        _, reg, front = tt
+        last_region_pt[id(reg)] = list(reg)[0]
+    while len(region_queue) > 1:
+        # get the smallest frontier from the frontier_queue
+        rsize, region, frontier = heapq.heappop(region_queue)
+        new_frontier = set()
+        for pt in frontier:
+            # add pt to growth_tree's edge.
+            last_reg_pt = last_region_pt[id(region)]
+            growth_tree.add_edge(last_region_pt, pt)
+            # add pt to the region
+            # add point's neighbors to new frontier.
+            # set the last region point for the region
+            # detect mergers.
+
+import hcluster
+def hierarchical_cluster(seed_pts, nx, ny):
+    def wraparound_dist(u, v):
+        from math import sqrt
+        dx = abs(u[0] - v[0])
+        dy = abs(u[1] - v[1])
+        if dx > nx/2:
+            dx = -dx + nx
+        if dy > ny/2:
+            dy = -dy + ny
+        return sqrt(dx**2 + dy**2)
+
+    pts = np.array(list(seed_pts))
+    pdist = hcluster.pdist(pts, wraparound_dist)
+    linkage = hcluster.linkage(pdist, method='single')
+    return linkage
+
+def fclusters(Z, seed_pts, nclusters):
+        flats = hcluster.fcluster(Z, t=nclusters, criterion='maxclust')
+        clusters = [set() for _ in range(max(flats))]
+        for idx, f in enumerate(flats):
+            clusters[f-1].add(seed_pts[idx])
+        return clusters
+
+def bounding_box(pts, nx, ny):
+    Xs = sorted([pt[0] for pt in pts])
+    Ys = sorted([pt[1] for pt in pts])
+    Xs.append(Xs[0]+nx)
+    Ys.append(Ys[0]+ny)
+    xdiff = np.diff(Xs)
+    ydiff = np.diff(Ys)
+    upper_x = np.where(xdiff == xdiff.max())[0]
+    upper_y = np.where(ydiff == ydiff.max())[0]
+    lower_x = upper_x+1
+    lower_y = upper_y+1
+    return (Xs[lower_x], Xs[upper_x],
+            Ys[lower_y], Ys[upper_y])
