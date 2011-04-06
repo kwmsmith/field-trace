@@ -15,6 +15,9 @@ from test_critical_point_network import visualize
 
 import pylab as pl
 
+import _critical_points as _cp
+
+from copy import copy
 
 def nth_timeslice(h5file, gpname, n):
     if isinstance(h5file, tables.file.File):
@@ -292,6 +295,36 @@ def logger(ss, newline=True):
     if newline:
         stderr.write('\n')
 
+def compare_cp_and_contour_tree():
+    logger("loading arrays...")
+    ctr = 0
+    ppp = []
+    for (psi_arr,) in h5_gen('data.h5', ('psi',)):
+        # psi_arr = nth_timeslice('data.h5', 'psi', -1)
+        # bx_arr =  nth_timeslice('data.h5', 'bx',  -1)
+        # by_arr =  nth_timeslice('data.h5', 'by',  -1)
+        logger("getting topological surface... %d" % ctr)
+        surf = _cp.TopoSurface(psi_arr)
+        scpts = surf.crit_pts
+        logger("done")
+        ppp.append((ctr, scpts.peaks, scpts.pits, scpts.passes))
+        logger("%d + %d - %d = %d" % (len(scpts.peaks), len(scpts.pits), len(scpts.passes),
+                                      len(scpts.peaks) + len(scpts.pits) - len(scpts.passes)))
+        pickle.dump(ppp, open('topo_surface_cpts.dat', 'wb'))
+        ctr += 1
+        # def height_func(n):
+            # return (psi_arr[n], n)
+        # logger("meshing psi_arr...")
+        # mesh = ct.make_mesh(psi_arr)
+        # logger("getting contour tree...")
+        # c_tree = ct.contour_tree(mesh, height_func)
+        # logger("getting contour tree critical points...")
+        # cpts = ct.critical_points(c_tree)
+        # logger("done...")
+        # import pdb; pdb.set_trace()
+
+compare_cp_and_contour_tree()
+
 def test_contour_tree():
     ctr = 0
     flux_tube_areas_record = []
@@ -399,7 +432,7 @@ def test_contour_tree():
         del cpts
 
 
-test_contour_tree()
+# test_contour_tree()
 
 """
 n=-1:
