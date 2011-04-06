@@ -88,6 +88,9 @@ def sort_by_h(gr, arr):
     return sgr
 
 
+def get_max_region(peak, passes):
+    pass
+
 class TopoSurface(object):
 
     def __init__(self, arr):
@@ -95,7 +98,30 @@ class TopoSurface(object):
         self.mesh = self.get_mesh()
         self.h_sorted_mesh = sort_by_h(self.mesh, self.arr)
         self.crit_pts = self.get_crit_pts()
-        self.surf_network = self.get_surface_network()
+        self._surf_network = None
+
+    def get_min_region(self, peak, passes):
+        return self._get_minmax_region(peak, passes, sign=1)
+
+    def get_max_region(self, peak, passes):
+        return self._get_minmax_region(peak, passes, sign=-1)
+
+    def _get_minmax_region(self, pit, passes, int sign):
+        raise RuntimeError("test me!!!")
+        import heapq
+        cdef set region = set([pit])
+        cdef list frontier = [(self.node_height(n, sign=sign), n) for n in self.mesh.neighbors(pit)]
+        heapq.heapify(frontier)
+        while True:
+            h, n = heapq.heappop(frontier)
+            region.add(n)
+            if n in passes:
+                break
+            nbrs = self.mesh.neighbors(n)
+            for nbr in nbrs:
+                if nbr not in region:
+                    heapq.heappush((self.node_height(nbr, sign=sign), nbr))
+        return region
 
     def get_mesh(self):
         G = graph()
@@ -159,6 +185,8 @@ class TopoSurface(object):
         return cps(crit_pts['peaks'], crit_pts['pits'], crit_pts['passes'])
 
     def get_surface_network(self):
+        if self._surf_network:
+            return self._surf_network
         peaks = self.crit_pts.peaks
         pits = self.crit_pts.pits
         passes = self.crit_pts.passes
@@ -179,7 +207,10 @@ class TopoSurface(object):
                         else:
                             cur = self.h_sorted_mesh[cur][0]
                     snet.add_edge(cur, p)
+        self._surf_network = snet
         return snet
+
+    surf_network = property(get_surface_network)
 
     def separated_pass_nbrs(self, pss):
         """
@@ -200,8 +231,8 @@ class TopoSurface(object):
                 raise RuntimeError("gotcha: %s" % diffs)
         return higher, lower
 
-    def node_height(self, node):
-        return (self.arr[node], node)
+    def node_height(self, node, int sign=1):
+        return (sign * self.arr[node], (sign * node[0], sign * node[1]))
 
     def get_reeb_graph(self):
         return get_reeb_graph(self.surf_network, self.crit_pts, self.node_height)
