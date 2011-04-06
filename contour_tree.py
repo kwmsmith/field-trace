@@ -390,9 +390,9 @@ def growth_tree(mesh, seed_pts):
             # set the last region point for the region
             # detect mergers.
 
-import hcluster
-def hierarchical_cluster(seed_pts, nx, ny):
-    def wraparound_dist(u, v):
+
+def wraparound_dist(nx, ny):
+    def _wraparound_dist(u, v):
         from math import sqrt
         dx = abs(u[0] - v[0])
         dy = abs(u[1] - v[1])
@@ -401,9 +401,13 @@ def hierarchical_cluster(seed_pts, nx, ny):
         if dy > ny/2:
             dy = -dy + ny
         return sqrt(dx**2 + dy**2)
+    return _wraparound_dist
 
+import hcluster
+def hierarchical_cluster(seed_pts, nx, ny):
+    wdist = wraparound_dist(nx, ny)
     pts = np.array(list(seed_pts))
-    pdist = hcluster.pdist(pts, wraparound_dist)
+    pdist = hcluster.pdist(pts, wdist)
     linkage = hcluster.linkage(pdist, method='single')
     return linkage
 
@@ -425,5 +429,5 @@ def bounding_box(pts, nx, ny):
     upper_y = np.where(ydiff == ydiff.max())[0]
     lower_x = upper_x+1
     lower_y = upper_y+1
-    return (Xs[lower_x], Xs[upper_x],
-            Ys[lower_y], Ys[upper_y])
+    return (Xs[lower_x]%nx, Xs[upper_x]%nx,
+            Ys[lower_y]%ny, Ys[upper_y]%ny)

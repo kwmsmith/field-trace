@@ -49,7 +49,6 @@ class test_hierarchical_cluster(object):
         bbs = []
         for cluster in clusters:
             bbs.append(ct.bounding_box(cluster, self.nx, self.ny))
-        set_trace()
 
 class test_prune_regions(object):
 
