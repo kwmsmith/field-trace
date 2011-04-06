@@ -2,6 +2,8 @@
 
 from pprint import pprint, pformat
 
+import networkx as netx
+
 cdef int AC = 0
 cdef int BD = 1
 
@@ -121,6 +123,8 @@ class TopoSurface(object):
     def get_crit_pts(self):
         cdef double diff_neg, diff_pos, diff1, diff2
         cdef int n_change, idx
+        from collections import namedtuple
+        cps = namedtuple('crit_pts', 'peaks pits passes')
         crit_pts = {'peaks': set(),
                    'pits' : set(),
                    'passes' : set(),
@@ -152,15 +156,15 @@ class TopoSurface(object):
                     crit_pts['pits'].add(node)
             elif n_change == 4 and (diff_pos + diff_neg) > 0:
                 crit_pts['passes'].add(node)
-        return crit_pts
+        return cps(crit_pts['peaks'], crit_pts['pits'], crit_pts['passes'])
 
     def get_surface_network(self):
-        peaks = self.crit_pts['peaks']
-        pits = self.crit_pts['pits']
-        passes = self.crit_pts['passes']
+        peaks = self.crit_pts.peaks
+        pits = self.crit_pts.pits
+        passes = self.crit_pts.passes
         ctr_max = 4 * self.arr.shape[0]
         peaks_n_pits = peaks.union(pits)
-        snet = graph()
+        snet = netx.Graph()
         for p in passes:
             # get the two highest (lowest) neighbors to p.
             higher, lower = self.separated_pass_nbrs(p)
@@ -253,9 +257,9 @@ def get_reeb_graph(surf_net, crit_pts, node2h):
     surf = surf_net.deepcopy()
     surf.order_by_key(keyfunc=node2h)
     reeb = graph()
-    peaks  = crit_pts['peaks']
-    passes = crit_pts['passes']
-    pits   = crit_pts['pits']
+    peaks  = crit_pts.peaks
+    passes = crit_pts.passes
+    pits   = crit_pts.pits
     unfinished = []
     unfinished.extend(peaks)
     unfinished.extend(passes)
@@ -286,10 +290,10 @@ def get_reeb_graph(surf_net, crit_pts, node2h):
             elif is_unfinished(node, passes, reeb):
                 new_unfinished.append(node)
         unfinished = new_unfinished
-        print 'unfinished: %s' % pformat(unfinished)
-        print 'reeb: %s' % pformat(dict(reeb._g))
-        print 'surf network: %s' % pformat(dict(surf._g))
-        res = raw_input('enter to continue, "q" to quit')
-        if res.lower() == 'q':
-            return reeb
+        # print 'unfinished: %s' % pformat(unfinished)
+        # print 'reeb: %s' % pformat(dict(reeb._g))
+        # print 'surf network: %s' % pformat(dict(surf._g))
+        # res = raw_input('enter to continue, "q" to quit')
+        # if res.lower() == 'q':
+            # return reeb
     return reeb

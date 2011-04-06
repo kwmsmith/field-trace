@@ -11,6 +11,9 @@ from nose.tools import eq_, ok_, set_trace
 
 from pprint import pprint
 
+import pylab as pl
+pl.ion()
+
 def random_periodic_upsample(N, upsamp, seed=None):
     if seed is not None:
         np.random.seed(seed)
@@ -30,9 +33,9 @@ def add_noise(arr, rms_frac=0.001):
     return arr + noise
 
 def verify_snet(snet, crit_pts):
-    peaks  = crit_pts['peaks']
-    passes  = crit_pts['passes']
-    pits  = crit_pts['pits']
+    peaks  = crit_pts.peaks
+    passes  = crit_pts.passes
+    pits  = crit_pts.pits
     for pss in passes:
         pass_nbrs = snet._g[pss]
         eq_(len(pass_nbrs), 4)
@@ -48,12 +51,12 @@ def test_critical_points():
 
     def _tester(arr, vis=False):
         surf = _cp.TopoSurface(arr)
-        peaks = surf.crit_pts['peaks']
-        pits = surf.crit_pts['pits']
-        passes = surf.crit_pts['passes']
+        peaks = surf.crit_pts.peaks
+        pits = surf.crit_pts.pits
+        passes = surf.crit_pts.passes
         print "\npeaks + pits - passes = %d" % (len(peaks) + len(pits) - len(passes))
         snet = surf.surf_network
-        snet_points = set(snet._g.keys())
+        snet_points = set(snet.nodes())
         missed_passes = passes.difference(snet_points)
         missed_pits = pits.difference(snet_points)
         missed_peaks = peaks.difference(snet_points)
@@ -61,19 +64,19 @@ def test_critical_points():
         print "missed passes: %d" % len(missed_passes)
         print "missed peaks: %d" % len(missed_peaks)
         print "missed pits: %d" % len(missed_pits)
+        if vis:
+            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=None)
+            raw_input('enter to continue')
         eq_(len(missed_passes), 0)
         eq_(len(missed_peaks), 0)
         eq_(len(missed_pits), 0)
         eq_(len(peaks) + len(pits), len(passes))
         eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
         # verify_snet(snet, surf.crit_pts)
-        reeb = surf.get_reeb_graph()
-        if vis:
-            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
-            raw_input('enter to continue')
+        # reeb = surf.get_reeb_graph()
 
     for _ in range(10):
-        yield _tester, random_periodic_upsample(32, 8, seed=_), False
+        yield _tester, random_periodic_upsample(32, 2, seed=_), True
 
 def visualize(
         arr,
@@ -87,7 +90,7 @@ def visualize(
         exts=('.eps', '.png')
         ):
 
-    import pylab as pl
+    # import pylab as pl
     if new_fig:
         fig = pl.figure()
     # pl.imshow(arr, interpolation='nearest', cmap='jet')
@@ -132,7 +135,7 @@ def compare_graphs(g1, g2):
     g2_unordered = dict((k, set(v)) for (k, v) in g2.items())
     return g1_unordered == g2_unordered
 
-def test_reeb1():
+def _test_reeb1():
     surf_net = _cp.graph()
     node2h_map = {
             6: 0,
@@ -163,7 +166,7 @@ def test_reeb1():
             reeb_gr._g,
             {1: [3], 2: [3], 3: [1, 2, 4], 4: [3, 5, 6], 5: [4], 6: [4]}))
 
-def test_reeb2():
+def _test_reeb2():
     surf_net = _cp.graph()
     node2h_map = {
             8: 0,
@@ -198,7 +201,7 @@ def test_reeb2():
             {1: [7], 2: [7], 3: [6], 4: [5], 5: [4, 8, 6], 6: [3, 7, 5], 7: [1, 2, 6], 8: [5]}))
     return
 
-def test_reeb3():
+def _test_reeb3():
     surf_net = _cp.graph()
     surf_net._g = {
             (5, 15): [(22, 28), (6, 15)],
