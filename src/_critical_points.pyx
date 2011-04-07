@@ -213,8 +213,64 @@ class TopoSurface(object):
                     # returned to a previously visited spot; ignore these.
                     break
         return (connected_peaks, connected_pits)
+
+    def contract_surf_network(self, node):
+        snet = self.surf_network
+        if node in self.crit_pts.pits:
+            passes = snet.pred[node]
+        elif node in self.crit_pts.peaks:
+            passes = snet.succ[node]
+        else:
+            raise ValueError("given node not in peaks or pits")
+        passes = [(dd['dh'], p) for p, dd in passes.items()]
+        passes.sort()
+        c_pass_h, c_pass = passes[0]
+        rest_passes = passes[1:]
+        if node in self.crit_pts.pits:
+            other_nodes = snet.succ[c_pass]
+        elif node in self.crit_pts.peaks:
+            other_nodes = snet.pred[c_pass]
+        other_nodes = [(dd['dh'], p) for p, dd in other_nodes.items() if p != node]
+        other_nodes.sort()
+        assert len(other_nodes) >= 1
+        for pss_dh, pss in rest_passes:
+            for oh, onode in other_nodes:
+                dh = abs(self.node_height(onode)[0] - self.node_height(pss)[0])
+                if node in self.crit_pts.peaks:
+                    if pss not in snet[onode]:
+                        snet.add_edge(onode, pss, dh=dh)
+                        break
+                elif node in self.crit_pts.pits:
+                    if onode not in snet[pss]:
+                        snet.add_edge(pss, onode, dh=dh)
+                        break
+        snet.remove_node(node)
+        if node in self.crit_pts.pits:
+            self.crit_pts.pits.remove(node)
+        elif node in self.crit_pts.peaks:
+            self.crit_pts.peaks.remove(node)
+        if len(other_nodes) == 1:
+            snet.remove_node(c_pass)
+            self.crit_pts.passes.remove(c_pass)
+        for oh, onode in other_nodes:
+            assert node != onode
+            assert c_pass != onode
+            self.weight_peak_or_pit(onode)
+
+    def weight_peak_or_pit(self, node, measure='dh'):
+        snet = self.surf_network
+        assert node in snet
+        if node in self.crit_pts.pits: dd = snet.pred
+        else: dd = snet.succ
+        if measure == 'dh':
+            max_dh = max([dta['dh'] for dta in dd[node].values()])
+            snet.node[node] = max_dh
+
+    def weight_peaks_n_pits(self, measure='dh'):
+        for pp in self.crit_pts.pits.union(self.crit_pts.peaks):
+            self.weight_peak_or_pit(pp, measure=measure)
     
-    def get_surface_network(self):
+    def _get_surface_network(self):
         if self._surf_network:
             return self._surf_network
         passes = self.crit_pts.passes
@@ -233,7 +289,7 @@ class TopoSurface(object):
         self._surf_network = snet
         return snet
 
-    surf_network = property(get_surface_network)
+    surf_network = property(_get_surface_network)
 
     def node_height(self, node, int sign=1):
         return (sign * self.arr[node], (sign * node[0], sign * node[1]))

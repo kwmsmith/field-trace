@@ -79,9 +79,24 @@ def test_critical_points():
         eq_(len(missed_pits), 0)
         # eq_(len(peaks) + len(pits), len(passes))
         eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
+        for _ in range(10):
+            npasses = len(passes)
+            random_peak = peaks.pop()
+            random_pit = pits.pop()
+            peaks.add(random_peak)
+            pits.add(random_pit)
+            surf.contract_surf_network(random_peak)
+            print len(passes), npasses
+            npasses = len(passes)
+            surf.contract_surf_network(random_pit)
+            print len(passes), npasses
+            ok_(random_peak not in peaks)
+            ok_(random_pit not in pits)
+            # ok_(len(passes) in (npasses, npasses-1))
+            non_morse = verify_snet(surf.surf_network, surf.crit_pts)
         # reeb = surf.get_reeb_graph()
 
-    for _ in range(10):
+    for _ in range(1):
         yield _tester, random_periodic_upsample(32, 4, seed=_), False
 
 def visualize(
