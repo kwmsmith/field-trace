@@ -1,15 +1,10 @@
-import scipy as sp
 from scipy import ndimage
 import numpy as np
 
 import _critical_points as _cp
 from upsample import upsample
 
-from kaw_analysis import test_vcalc as tv
-
 from nose.tools import eq_, ok_, set_trace
-
-from pprint import pprint
 
 import pylab as pl
 pl.ion()
@@ -36,16 +31,27 @@ def verify_snet(snet, crit_pts):
     peaks  = crit_pts.peaks
     passes  = crit_pts.passes
     pits  = crit_pts.pits
+    non_morse_passes = set()
     for pss in passes:
-        pass_nbrs = snet._g[pss]
-        eq_(len(pass_nbrs), 4)
-        for pn in pass_nbrs:
-            ok_(pn in peaks or pn in pits)
+        cpeaks = snet.predecessors(pss)
+        cpits  = snet.successors(pss)
+        pass_nbrs = cpeaks + cpits
+        ok_(len(pass_nbrs) >= 4)
+        if len(pass_nbrs) > 4:
+            non_morse_passes.add((pss, len(pass_nbrs)))
+        for cpk in cpeaks:
+            ok_(cpk in peaks)
+        for cpit in cpits:
+            ok_(cpit in pits)
     for pp in pits.union(peaks):
-        pp_nbrs = snet._g[pp]
+        if pp in pits:
+            pp_nbrs = snet.predecessors(pp)
+        elif pp in peaks:
+            pp_nbrs = snet.successors(pp)
+        ok_(pp_nbrs)
         for pn in pp_nbrs:
             ok_(pn in passes)
-
+    return non_morse_passes
 
 def test_critical_points():
 
@@ -65,18 +71,18 @@ def test_critical_points():
         print "missed peaks: %d" % len(missed_peaks)
         print "missed pits: %d" % len(missed_pits)
         if vis:
-            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=None)
+            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
             raw_input('enter to continue')
+        non_morse = verify_snet(snet, surf.crit_pts)
         eq_(len(missed_passes), 0)
         eq_(len(missed_peaks), 0)
         eq_(len(missed_pits), 0)
-        eq_(len(peaks) + len(pits), len(passes))
+        # eq_(len(peaks) + len(pits), len(passes))
         eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
-        # verify_snet(snet, surf.crit_pts)
         # reeb = surf.get_reeb_graph()
 
     for _ in range(10):
-        yield _tester, random_periodic_upsample(32, 2, seed=_), True
+        yield _tester, random_periodic_upsample(32, 4, seed=_), False
 
 def visualize(
         arr,

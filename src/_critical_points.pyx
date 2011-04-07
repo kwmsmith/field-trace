@@ -87,9 +87,11 @@ def sort_by_h(gr, arr):
         sgr[node] = h_sort
     return sgr
 
+def _get_lowest_neighbor(h_sorted_mesh, node):
+    return h_sorted_mesh[node][0]
 
-def get_max_region(peak, passes):
-    pass
+def _get_highest_neighbor(h_sorted_mesh, node):
+    return h_sorted_mesh[node][-1]
 
 class TopoSurface(object):
 
@@ -180,56 +182,58 @@ class TopoSurface(object):
                     crit_pts['peaks'].add(node)
                 elif diff_pos > 0 and diff_neg == 0.0:
                     crit_pts['pits'].add(node)
-            elif n_change == 4 and (diff_pos + diff_neg) > 0:
+            elif (n_change >= 4 and not n_change % 2) and (diff_pos + diff_neg) > 0:
                 crit_pts['passes'].add(node)
         return cps(crit_pts['peaks'], crit_pts['pits'], crit_pts['passes'])
-
+    
+    def nearest_extrema(self, pss):
+        pass_nbrs = self.mesh._g[pss]
+        peaks_n_pits = self.crit_pts.peaks.union(self.crit_pts.pits)
+        connected_peaks = set()
+        connected_pits = set()
+        for nbr in pass_nbrs:
+            # go up from every neighbor.
+            cur = nbr
+            while True:
+                if cur in self.crit_pts.peaks:
+                    connected_peaks.add(cur)
+                    break
+                cur = _get_highest_neighbor(self.h_sorted_mesh, cur)
+                if cur == pss or cur in pass_nbrs:
+                    # returned to a previously visited spot; ignore these.
+                    break
+            # go down from every neighbor.
+            cur = nbr
+            while True:
+                if cur in self.crit_pts.pits:
+                    connected_pits.add(cur)
+                    break
+                cur = _get_lowest_neighbor(self.h_sorted_mesh, cur)
+                if cur == pss or cur in pass_nbrs:
+                    # returned to a previously visited spot; ignore these.
+                    break
+        return (connected_peaks, connected_pits)
+    
     def get_surface_network(self):
         if self._surf_network:
             return self._surf_network
-        peaks = self.crit_pts.peaks
-        pits = self.crit_pts.pits
         passes = self.crit_pts.passes
-        ctr_max = 4 * self.arr.shape[0]
-        peaks_n_pits = peaks.union(pits)
-        snet = netx.Graph()
+        snet = netx.DiGraph()
         for p in passes:
-            # get the two highest (lowest) neighbors to p.
-            higher, lower = self.separated_pass_nbrs(p)
-            nbrs_and_dir = ((higher, 'up'),
-                            (lower , 'down'))
-            for ns, dir in nbrs_and_dir:
-                for n in ns:
-                    cur = n
-                    while cur not in peaks_n_pits:
-                        if dir == 'up':
-                            cur = self.h_sorted_mesh[cur][-1]
-                        else:
-                            cur = self.h_sorted_mesh[cur][0]
-                    snet.add_edge(cur, p)
+            connected_peaks, connected_pits = self.nearest_extrema(p)
+            pass_h = self.node_height(p)[0]
+            for peak in connected_peaks:
+                dh = self.node_height(peak)[0] - pass_h
+                assert dh > 0.0
+                snet.add_edge(peak, p, dh=dh)
+            for pit in connected_pits:
+                dh = pass_h - self.node_height(pit)[0]
+                assert dh > 0.0
+                snet.add_edge(p, pit, dh=dh)
         self._surf_network = snet
         return snet
 
     surf_network = property(get_surface_network)
-
-    def separated_pass_nbrs(self, pss):
-        """
-        returns neighbors of `pss` that sample different min & max regions;
-        regions are all separated.
-
-        """
-        nbrs = self.mesh._g[pss]
-        higher = []
-        lower = []
-        diffs = [self.arr[n] - self.arr[pss] for n in nbrs]
-        for idx in range(len(diffs)):
-            if diffs[idx-1] > 0 and diffs[idx] < 0:
-                higher.append(nbrs[idx-1])
-            elif diffs[idx-1] < 0 and diffs[idx] > 0:
-                lower.append(nbrs[idx-1])
-            elif diffs[idx] == 0.0:
-                raise RuntimeError("gotcha: %s" % diffs)
-        return higher, lower
 
     def node_height(self, node, int sign=1):
         return (sign * self.arr[node], (sign * node[0], sign * node[1]))
