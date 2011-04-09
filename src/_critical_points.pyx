@@ -4,6 +4,8 @@ from pprint import pprint, pformat
 
 import networkx as netx
 
+import heapq
+
 cdef int AC = 0
 cdef int BD = 1
 
@@ -102,27 +104,34 @@ class TopoSurface(object):
         self.crit_pts = self.get_crit_pts()
         self._surf_network = None
 
-    def get_min_region(self, peak, passes):
-        return self._get_minmax_region(peak, passes, sign=1)
+    def get_minmax_regions(self):
+        passes = self.crit_pts.passes
+        all_regions = [self.get_minmax_region(pit, passes) for pit in self.crit_pts.pits]
+        all_regions.extend([self.get_minmax_region(peak, passes) for peak in self.crit_pts.peaks])
+        return all_regions
 
-    def get_max_region(self, peak, passes):
-        return self._get_minmax_region(peak, passes, sign=-1)
-
-    def _get_minmax_region(self, pit, passes, int sign):
-        raise RuntimeError("test me!!!")
-        import heapq
-        cdef set region = set([pit])
-        cdef list frontier = [(self.node_height(n, sign=sign), n) for n in self.mesh.neighbors(pit)]
+    def get_minmax_region(self, node, passes):
+        if node in self.crit_pts.pits:
+            sign = 1
+        elif node in self.crit_pts.peaks:
+            sign = -1
+        else:
+            raise ValueError("node not in peaks or pits")
+        cdef set region = set([node])
+        cdef list frontier = [(self.node_height(n, sign=sign), n) for n in self.mesh._g[node]]
+        cdef set frontier_set = set([n for h,n in frontier])
         heapq.heapify(frontier)
         while True:
             h, n = heapq.heappop(frontier)
+            frontier_set.remove(n)
             region.add(n)
             if n in passes:
                 break
-            nbrs = self.mesh.neighbors(n)
+            nbrs = self.mesh._g[n]
             for nbr in nbrs:
-                if nbr not in region:
-                    heapq.heappush((self.node_height(nbr, sign=sign), nbr))
+                if nbr not in region and nbr not in frontier_set:
+                    frontier_set.add(nbr)
+                    heapq.heappush(frontier, (self.node_height(nbr, sign=sign), nbr))
         return region
 
     def get_mesh(self):
@@ -214,7 +223,30 @@ class TopoSurface(object):
                     break
         return (connected_peaks, connected_pits)
 
-    def contract_surf_network(self, node):
+    def simplify_surf_network(self, measure, threshold):
+        import time
+        snet = self.surf_network
+        print "%s: weighting peaks 'n pits" % time.ctime()
+        self.weight_peaks_n_pits(measure)
+        print "%s: peaks n' pits weighted" % time.ctime()
+        pqueue = [(m, node) for (node, m) in snet.nodes(data=True) if m != {}]
+        heapq.heapify(pqueue)
+        print "%s: got pqueue" % time.ctime()
+        seen = set()
+        while True:
+            m, node = heapq.heappop(pqueue)
+            print "%s: priority: %d" % (time.ctime(), m)
+            if node in seen:
+                continue
+            seen.add(node)
+            if m > threshold:
+                break
+            changed_nodes = self.contract_surf_network(node, measure=measure)
+            print len(changed_nodes)
+            for cn in changed_nodes:
+                heapq.heappush(pqueue, (snet.node[cn], cn))
+
+    def contract_surf_network(self, node, measure=None):
         snet = self.surf_network
         if node in self.crit_pts.pits:
             passes = snet.pred[node]
@@ -232,41 +264,58 @@ class TopoSurface(object):
             other_nodes = snet.pred[c_pass]
         other_nodes = [(dd['dh'], p) for p, dd in other_nodes.items() if p != node]
         other_nodes.sort()
-        assert len(other_nodes) >= 1
+        to_update = set()
         for pss_dh, pss in rest_passes:
             for oh, onode in other_nodes:
                 dh = abs(self.node_height(onode)[0] - self.node_height(pss)[0])
                 if node in self.crit_pts.peaks:
                     if pss not in snet[onode]:
                         snet.add_edge(onode, pss, dh=dh)
+                        to_update.add(onode)
                         break
                 elif node in self.crit_pts.pits:
                     if onode not in snet[pss]:
                         snet.add_edge(pss, onode, dh=dh)
+                        to_update.add(onode)
                         break
         snet.remove_node(node)
         if node in self.crit_pts.pits:
             self.crit_pts.pits.remove(node)
         elif node in self.crit_pts.peaks:
             self.crit_pts.peaks.remove(node)
-        if len(other_nodes) == 1:
+        if len(other_nodes) <= 1:
             snet.remove_node(c_pass)
             self.crit_pts.passes.remove(c_pass)
-        for oh, onode in other_nodes:
+        for onode in to_update:
             assert node != onode
             assert c_pass != onode
-            self.weight_peak_or_pit(onode)
+            self.weight_peak_or_pit(onode, measure=measure)
+        return to_update
 
-    def weight_peak_or_pit(self, node, measure='dh'):
+    def get_peak_pit_region_area(self, node):
+        region = self.get_minmax_region(node, self.crit_pts.passes)
+        return len(region)
+
+    def get_min_dh(self, node):
         snet = self.surf_network
         assert node in snet
         if node in self.crit_pts.pits: dd = snet.pred
         else: dd = snet.succ
-        if measure == 'dh':
-            max_dh = max([dta['dh'] for dta in dd[node].values()])
-            snet.node[node] = max_dh
+        return min([dta['dh'] for dta in dd[node].values()])
 
-    def weight_peaks_n_pits(self, measure='dh'):
+    def get_max_dh(self, node):
+        snet = self.surf_network
+        assert node in snet
+        if node in self.crit_pts.pits: dd = snet.pred
+        else: dd = snet.succ
+        return max([dta['dh'] for dta in dd[node].values()])
+
+    def weight_peak_or_pit(self, node, measure=None):
+        measure = measure or self.get_max_dh
+        snet = self.surf_network
+        snet.node[node] = measure(node)
+
+    def weight_peaks_n_pits(self, measure=None):
         for pp in self.crit_pts.pits.union(self.crit_pts.peaks):
             self.weight_peak_or_pit(pp, measure=measure)
     

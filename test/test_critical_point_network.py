@@ -27,7 +27,7 @@ def add_noise(arr, rms_frac=0.001):
     noise = np.random.normal(scale=rms_frac*rms, size=arr.shape)
     return arr + noise
 
-def verify_snet(snet, crit_pts):
+def verify_snet(snet, crit_pts, at_least_n_pass_nbrs=4):
     peaks  = crit_pts.peaks
     passes  = crit_pts.passes
     pits  = crit_pts.pits
@@ -36,7 +36,7 @@ def verify_snet(snet, crit_pts):
         cpeaks = snet.predecessors(pss)
         cpits  = snet.successors(pss)
         pass_nbrs = cpeaks + cpits
-        ok_(len(pass_nbrs) >= 4)
+        ok_(len(pass_nbrs) >= at_least_n_pass_nbrs)
         if len(pass_nbrs) > 4:
             non_morse_passes.add((pss, len(pass_nbrs)))
         for cpk in cpeaks:
@@ -70,34 +70,37 @@ def test_critical_points():
         print "missed passes: %d" % len(missed_passes)
         print "missed peaks: %d" % len(missed_peaks)
         print "missed pits: %d" % len(missed_pits)
-        if vis:
-            visualize(arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
-            raw_input('enter to continue')
+        # regions = surf.get_minmax_regions()
+        # mask = np.zeros(arr.shape, dtype=np.bool_)
+        # for region in regions:
+            # for p in region:
+                # mask[p] = True
+        # mask_arr = arr.copy()
+        # mask_arr[mask] = 2 * arr.max()
+        # if vis:
+            # visualize(mask_arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
+            # raw_input('enter to continue')
         non_morse = verify_snet(snet, surf.crit_pts)
         eq_(len(missed_passes), 0)
         eq_(len(missed_peaks), 0)
         eq_(len(missed_pits), 0)
         # eq_(len(peaks) + len(pits), len(passes))
         eq_(len(snet_points), len(peaks)+len(pits)+len(passes))
-        for _ in range(10):
-            npasses = len(passes)
-            random_peak = peaks.pop()
-            random_pit = pits.pop()
-            peaks.add(random_peak)
-            pits.add(random_pit)
-            surf.contract_surf_network(random_peak)
-            print len(passes), npasses
-            npasses = len(passes)
-            surf.contract_surf_network(random_pit)
-            print len(passes), npasses
-            ok_(random_peak not in peaks)
-            ok_(random_pit not in pits)
-            # ok_(len(passes) in (npasses, npasses-1))
-            non_morse = verify_snet(surf.surf_network, surf.crit_pts)
+        surf.simplify_surf_network(measure=surf.get_peak_pit_region_area, threshold=4)
+        # regions = surf.get_minmax_regions()
+        # mask = np.zeros(arr.shape, dtype=np.bool_)
+        # for region in regions:
+            # for p in region:
+                # mask[p] = True
+        # mask_arr = arr.copy()
+        # mask_arr[mask] = 2 * arr.max()
+        # if vis:
+            # visualize(mask_arr, mesh=None, crit_pts=surf.crit_pts, surf_network=snet)
+            # raw_input('enter to continue')
         # reeb = surf.get_reeb_graph()
 
     for _ in range(1):
-        yield _tester, random_periodic_upsample(32, 4, seed=_), False
+        yield _tester, random_periodic_upsample(128, 4, seed=_), False
 
 def visualize(
         arr,
