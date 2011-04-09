@@ -159,8 +159,14 @@ def compare_graphs(g1, g2):
     g2_unordered = dict((k, set(v)) for (k, v) in g2.items())
     return g1_unordered == g2_unordered
 
-def _test_reeb1():
-    surf_net = _cp.graph()
+class cpts(object):
+    def __init__(self, peaks, pits, passes):
+        self.peaks = peaks
+        self.pits = pits
+        self.passes = passes
+
+def test_reeb1():
+    surf_net = _cp.netx.DiGraph()
     node2h_map = {
             6: 0,
             5: 1,
@@ -170,28 +176,30 @@ def _test_reeb1():
             1: 5,
             }
     node2h = lambda n: (node2h_map[n], n)
-    surf_net.add_edge(1,3)
-    surf_net.add_edge(1,4)
-    surf_net.add_edge(2,3)
-    surf_net.add_edge(2,4)
-    surf_net.add_edge(3,5)
-    surf_net.add_edge(3,6)
-    surf_net.add_edge(4,5)
-    surf_net.add_edge(4,6)
+
+    def _add_edge(n1, n2):
+        surf_net.add_edge(n1, n2, dh=abs(node2h(n1)[0] - node2h(n2)[0]))
+
+    _add_edge(1,3)
+    _add_edge(1,4)
+    _add_edge(2,3)
+    _add_edge(2,4)
+    _add_edge(3,5)
+    _add_edge(3,6)
+    _add_edge(4,5)
+    _add_edge(4,6)
     peaks  = set([1, 2])
     passes = set([3, 4])
     pits   = set([5, 6])
-    crit_pts = {'peaks': peaks,
-                'passes': passes,
-                'pits' : pits}
+    crit_pts = cpts(peaks=peaks, passes=passes, pits=pits)
     reeb_gr = _cp.get_reeb_graph(surf_net, crit_pts, node2h)
     ok_(
         compare_graphs(
-            reeb_gr._g,
+            reeb_gr.edge,
             {1: [3], 2: [3], 3: [1, 2, 4], 4: [3, 5, 6], 5: [4], 6: [4]}))
 
-def _test_reeb2():
-    surf_net = _cp.graph()
+def test_reeb2():
+    surf_net = _cp.netx.DiGraph()
     node2h_map = {
             8: 0,
             7: 1,
@@ -203,30 +211,32 @@ def _test_reeb2():
             1: 3,
             }
     node2h = lambda n: (node2h_map[n], n)
-    surf_net.add_edge(1,5)
-    surf_net.add_edge(1,6)
-    surf_net.add_edge(1,7)
-    surf_net.add_edge(2,7)
-    surf_net.add_edge(3,6)
-    surf_net.add_edge(4,5)
-    surf_net.add_edge(5,8)
-    surf_net.add_edge(6,8)
-    surf_net.add_edge(7,8)
+
+    def _add_edge(n1, n2):
+        surf_net.add_edge(n1, n2, dh=abs(node2h(n1)[0] - node2h(n2)[0]))
+
+    _add_edge(1,5)
+    _add_edge(1,6)
+    _add_edge(1,7)
+    _add_edge(2,7)
+    _add_edge(3,6)
+    _add_edge(4,5)
+    _add_edge(5,8)
+    _add_edge(6,8)
+    _add_edge(7,8)
     peaks  = set([1, 2, 3, 4])
     passes = set([5, 6, 7])
     pits   = set([8])
-    crit_pts = {'peaks': peaks,
-                'passes': passes,
-                'pits' : pits}
+    crit_pts = cpts(peaks=peaks, passes=passes, pits=pits)
     reeb_gr = _cp.get_reeb_graph(surf_net, crit_pts, node2h)
     ok_(
         compare_graphs(
-            reeb_gr._g,
+            reeb_gr.edge,
             {1: [7], 2: [7], 3: [6], 4: [5], 5: [4, 8, 6], 6: [3, 7, 5], 7: [1, 2, 6], 8: [5]}))
     return
 
 def _test_reeb3():
-    surf_net = _cp.graph()
+    surf_net = _cp.netx.DiGraph()
     surf_net._g = {
             (5, 15): [(22, 28), (6, 15)],
             (5, 31): [(6, 25), (26, 6), (10, 2)],

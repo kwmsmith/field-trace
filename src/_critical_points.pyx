@@ -226,23 +226,18 @@ class TopoSurface(object):
     def simplify_surf_network(self, measure, threshold):
         import time
         snet = self.surf_network
-        print "%s: weighting peaks 'n pits" % time.ctime()
         self.weight_peaks_n_pits(measure)
-        print "%s: peaks n' pits weighted" % time.ctime()
         pqueue = [(m, node) for (node, m) in snet.nodes(data=True) if m != {}]
         heapq.heapify(pqueue)
-        print "%s: got pqueue" % time.ctime()
         seen = set()
         while True:
             m, node = heapq.heappop(pqueue)
-            print "%s: priority: %d" % (time.ctime(), m)
             if node in seen:
                 continue
             seen.add(node)
             if m > threshold:
                 break
             changed_nodes = self.contract_surf_network(node, measure=measure)
-            print len(changed_nodes)
             for cn in changed_nodes:
                 heapq.heappush(pqueue, (snet.node[cn], cn))
 
@@ -382,10 +377,64 @@ def is_peak_like(node, peaks, passes, reeb, snet, node2h):
 
 def is_unfinished(node, passes, gr):
     nbrs = gr._g[node]
-    print node, "node in passes: %s" % (node in passes), "len(nbrs) = %d" % len(nbrs)
     return node in passes and len(nbrs) != 3
 
+def _is_peak_like(node, surf):
+    return not surf.in_degree(node)
+
+def _is_pit_like(node, surf):
+    return not surf.out_degree(node)
+
 def get_reeb_graph(surf_net, crit_pts, node2h):
+    # make a copy of the surface network that we can destroy while creating
+    # the reeb graph.
+    surf = netx.DiGraph(surf_net)
+    reeb = netx.Graph()
+    peaks  = crit_pts.peaks
+    passes = crit_pts.passes
+    pits   = crit_pts.pits
+    unfinished = []
+    unfinished.extend(peaks)
+    unfinished.extend(pits)
+    unfinished.extend(passes)
+    while unfinished:
+        new_unfinished = []
+        for node in unfinished:
+            # if is_peak_like(node, peaks, passes, reeb, surf, node2h):
+            if _is_peak_like(node, surf) and _is_pit_like(node, surf):
+                continue
+            if not (_is_peak_like(node, surf) or _is_pit_like(node, surf)):
+                new_unfinished.append(node)
+                continue
+            elif _is_peak_like(node, surf):
+                connected_passes = surf.succ[node]
+                nearest_pass = max([(node2h(n), n) for n, dta in connected_passes.items()])[1]
+            elif _is_pit_like(node, surf):
+                connected_passes = surf.pred[node]
+                nearest_pass = min([(node2h(n), n) for n, dta in connected_passes.items()])[1]
+            other_passes = [n for n in connected_passes if n != nearest_pass]
+            reeb.add_edge(node, nearest_pass)
+            for other_pass in other_passes:
+                # assert lower_pass in passes
+                try:
+                    surf.remove_edge(node, other_pass)
+                except netx.NetworkXError:
+                    surf.remove_edge(other_pass, node)
+                dh = abs(node2h(nearest_pass)[0] - node2h(other_pass)[0])
+                nearest_h = node2h(nearest_pass)
+                other_h = node2h(other_pass)
+                if nearest_h > other_h:
+                    surf.add_edge(nearest_pass, other_pass, dh=dh)
+                else:
+                    surf.add_edge(other_pass, nearest_pass, dh=dh)
+            try:
+                surf.remove_edge(node, nearest_pass)
+            except netx.NetworkXError:
+                surf.remove_edge(nearest_pass, node)
+        unfinished = new_unfinished
+    return reeb
+
+def _get_reeb_graph(surf_net, crit_pts, node2h):
     # make a copy of the surface network that we can destroy while creating
     # the reeb graph.
     ####
