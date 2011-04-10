@@ -1,0 +1,36 @@
+import igraph as ig
+import networkx as nx
+
+height = 18
+
+def ig_test_delete(height=height):
+    g = ig.Graph.Tree(2**(height), 2)
+    # for node in g.vs:
+        # g.delete_vertices(node)
+    g.delete_vertices(g.vs)
+
+def ig_test_create(height=height):
+    g = ig.Graph.Tree(2**(height), 2)
+    assert len(g.vs) == 2**(height), (len(g.vs), 2**height)
+
+def nx_test_delete(height=height):
+    g = nx.balanced_tree(2, height-1)
+    for node in g.nodes():
+        g.remove_node(node)
+
+def nx_test_create(height=height):
+    g = nx.balanced_tree(2, height-1)
+    assert len(g) == 2**(height)-1, (len(g), 2**height-1)
+
+ig_test_delete()
+ig_test_create()
+nx_test_delete()
+nx_test_create()
+
+%timeit ig_test_create()
+%timeit ig_test_delete()
+
+%timeit nx_test_create()
+%timeit nx_test_delete()
+
+# vim:ft=python
