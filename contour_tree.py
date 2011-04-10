@@ -348,23 +348,6 @@ def get_flux_tubes(c_tree):
     leaf_edges = [((n1,n2), D['arc']) for (n1, n2, D) in leaf_edges]
     return leaf_edges
 
-def flux_tube_radial_profile(flux_tube_region, min_max_pt, arr, other_arr=None):
-    from field_trace import _level_set
-    other_arr = other_arr or arr
-    nx, ny = arr.shape
-    # get seed points
-    seed_points = []
-    cur = min_max_pt
-    radial_profile = {}
-    while cur in flux_tube_region:
-        seed_points.append(cur)
-        cur = (cur[0], (cur[1]+1)%ny)
-    for seed in seed_points:
-        seed_flux = arr[seed]
-        lset = _level_set(arr, level_val=seed_flux, position=seed)
-        lset_avg = other_arr[lset.xs, lset.ys].mean()
-        radial_profile[seed] = (seed_flux, lset_avg)
-    return radial_profile
 
 def growth_tree(mesh, seed_pts):
     growth_tree = DiGraph()
