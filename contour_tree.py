@@ -348,8 +348,8 @@ def get_flux_tubes(c_tree):
     leaf_edges = [((n1,n2), D['arc']) for (n1, n2, D) in leaf_edges]
     return leaf_edges
 
-
 def growth_tree(mesh, seed_pts):
+    raise RuntimeError("I think I'm untested and unfinished, check to see...")
     growth_tree = DiGraph()
     regions = [(set([seed_pt]), set([seed_pt])) for seed_pt in seed_pts]
     last_region_pt = {}
@@ -384,6 +384,15 @@ def wraparound_dist(nx, ny):
         if dy > ny/2:
             dy = -dy + ny
         return sqrt(dx**2 + dy**2)
+    return _wraparound_dist
+
+def wraparound_dist_vec(nx, ny):
+    def _wraparound_dist(x0, y0, x1, y1):
+        dx = np.abs(x0 - x1)
+        dy = np.abs(y0 - y1)
+        dx = np.where(dx > nx/2, -dx + nx, dx)
+        dy = np.where(dy > ny/2, -dy + ny, dy)
+        return np.sqrt(dx**2 + dy**2)
     return _wraparound_dist
 
 import hcluster

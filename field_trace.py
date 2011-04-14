@@ -237,24 +237,25 @@ def marked_to_mask(shape, marked):
         mask[m.xs, m.ys] = True
     return mask
 
-def _level_set(arr, level_val, position):
+def _level_set(arr, level_val, position, neighbors_func=None):
     nx, ny = arr.shape
-    larr = arr - level_val # leveled array
+    if neighbors_func is None:
+        neighbors_func = lambda t: _field_trace.neighbors8(t[0], t[1], nx, ny)
     i0, j0 = int(position[0]) % nx, int(position[1]) % ny
-    cvs = _get_corner_vals(larr, i0, j0)
     marked = set([(i0, j0)])
     front = [(i0, j0)]
     while front:
-        i0, j0 = front.pop()
-        for (i, j) in _field_trace.neighbors8(i0, j0, nx, ny):
+        pt = front.pop()
+        for (i, j) in neighbors_func(pt):
+        # for (i, j) in _field_trace.neighbors8(i0, j0, nx, ny):
             if (i,j) in marked:
                 continue
-            cvs = _get_corner_vals(larr, i, j)
-            if not _field_trace.same_sign_or_zero(*cvs):
+            cvs = _get_corner_vals(arr, i, j)
+            if not _field_trace.same_sign_or_zero(*cvs, lval=level_val):
                 marked.add((i, j))
                 front.append((i, j))
 
-    psns = np.array(list(marked), dtype=np.uint16)
+    psns = np.array(list(marked))
     return Region(psns[:,0], psns[:,1])
 
 neighbors4 = _field_trace.neighbors4
@@ -285,14 +286,32 @@ class Region(object):
         if len(xs) != len(ys):
             raise ValueError("invalid coordinates")
         self.size = len(xs)
-        self.xs = np.asanyarray(xs, dtype=np.uint16)
-        self.ys = np.asanyarray(ys, dtype=np.uint16)
+        self.xs = np.asanyarray(xs, dtype=np.int64)
+        self.ys = np.asanyarray(ys, dtype=np.int64)
         self.ncontained = 0
         self.contained_nulls = set()
+        self._region_set = None
+
+    def _get_region_set(self):
+        rset = set()
+        for x, y in zip(self.xs, self.ys):
+            rset.add((x,y))
+        return rset
+
+    region_set = property(_get_region_set)
 
     def is_subregion(self, other):
         return self.size <= other.size and \
                 np.any((self.xs[0] == other.xs) & (self.ys[0] == other.ys))
+
+    def __contains__(self, (x, y)):
+        return (x, y) in self.region_set
+
+    def intersection(self, other):
+        new_set = self.region_set.intersection(other)
+        xs, ys = zip(*new_set)
+        return Region(xs, ys)
+
 
     '''
     def _is_subregion(self, other):

@@ -61,7 +61,7 @@ def upsample(arr, fac):
     return new_a
 
 def test_tracer():
-    from kaw_analysis import test_vcalc as tv
+    from kaw_analysis import test_vcalc as tv#{{{
     N = 64
     dta = tv.sin_cos_prod(N, 5, 5)
     # dta = psi_arrs[-1]
@@ -116,12 +116,12 @@ def test_tracer():
         pl.scatter(Y, X, c='k')
         X, Y = zip(*peak0s)
         pl.scatter(Y, X, c='b')
-        import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()#}}}
 
 # test_tracer()
 
 def test_level_set():
-    # N = 128
+    # N = 128#{{{
     # n, m = 10, 15
     # test_data = tv.sin_cos_arr(N, n, m)
     arr_idx = -2
@@ -202,7 +202,7 @@ def test_level_set():
                 X, Y = zip(*null0s)
                 pl.scatter(Y, X, c='b')
 
-        raw_input("enter to continue")
+        raw_input("enter to continue")#}}}
 
 def test_detect_min_regions():
 
@@ -234,7 +234,7 @@ def num_nonredundant_nulls(nulls, shape):
     return nlabels
 
 def save_figs():
-    from upsample import upsample
+    from upsample import upsample#{{{
     for bx, by, psi_arr in izip(h5_gen('data.h5', 'bx'),
                                 h5_gen('data.h5', 'by'),
                                 h5_gen('data.h5', 'psi')):
@@ -273,7 +273,7 @@ def save_figs():
         # field_trace.save_fig_with_scatter(overlay, (peak_x, peak_y), 'bmagmaskpeaks_%03d' % ctr)
         # field_trace.save_fig(overlay, 'bmagmask_%03d' % ctr)
         # ctr += 1
-        break
+        break#}}}
 
 # save_figs()
 
@@ -296,7 +296,7 @@ def logger(ss, newline=True):
         stderr.write('\n')
 
 def compare_cp_and_contour_tree():
-    logger("loading arrays...")
+    logger("loading arrays...")#{{{
     ctr = 0
     ppp = []
     for (psi_arr,) in h5_gen('data.h5', ('psi',)):
@@ -321,12 +321,10 @@ def compare_cp_and_contour_tree():
         # logger("getting contour tree critical points...")
         # cpts = ct.critical_points(c_tree)
         # logger("done...")
-        # import pdb; pdb.set_trace()
-
-compare_cp_and_contour_tree()
+        # import pdb; pdb.set_trace()#}}}
 
 def test_contour_tree():
-    ctr = 0
+    ctr = 0#{{{
     flux_tube_areas_record = []
     for bx_arr, by_arr, psi_arr in h5_gen('data.h5', ('bx', 'by', 'psi')):
         b_mag = np.sqrt(bx_arr**2 + by_arr**2)
@@ -429,27 +427,71 @@ def test_contour_tree():
 
         del c_tree
         del regions
-        del cpts
+        del cpts#}}}
 
+from region_analysis import radial_profiles
+def test_radial_profiles():
+    psi_arr = nth_timeslice('data.h5', 'psi', -1)
+    bx_arr = nth_timeslice('data.h5', 'bx', -1)
+    by_arr = nth_timeslice('data.h5', 'by', -1)
+    # for bx_arr, by_arr, psi_arr in h5_gen('data.h5', ('bx', 'by', 'psi')):
+    psi_arr = psi_arr.astype(np.double)
+    mask = np.zeros(psi_arr.shape, dtype=np.bool_)
+    bmag = np.sqrt(bx_arr**2 + by_arr**2).astype(np.double)
+    surf = _cp.TopoSurface(psi_arr)
+    rprofs = radial_profiles(surf, threshold=50, expand_regions=10,
+            other_arr=bmag, mask=mask)
+    # psi_arr[mask] = 2 * psi_arr.max()
+    # pl.figure()
+    # pl.imshow(psi_arr, interpolation='nearest')
+    # pl.figure()
+    # pl.imshow(bmag)
+    bmag_fig = pl.figure()
+    fluxes_vs_dists = pl.figure()
+    fluxes_vs_flux = pl.figure()
+    pl.hold(False)
+    for minmax, (rprof, region) in rprofs.items():
+        # minmax_flux = arr_div[minmax]
+        rprof.sort(key=lambda x: x[1])
+        import pdb; pdb.set_trace()
+        pts, fluxes, avg_b, avg_b_errs, avg_dists, avg_dists_errs = zip(*rprof)
+        region_xs, region_ys = zip(*region)
+        mask = np.ones(bmag.shape, dtype=np.bool_)
+        mask[region_xs, region_ys] = False
+        masked_bmag = bmag.copy()
+        masked_bmag[mask] = 0.0
+        pl.figure(bmag_fig.number)
+        pl.imshow(masked_bmag)
+        avg_b = np.array(avg_b)
+        avg_b -= avg_b[0]
+        avg_dists = np.array(avg_dists)
+        fluxes = np.array(fluxes)
+        fluxes -= fluxes.min()
+        # fluxes = np.abs(np.array(fluxes) - minmax_flux)
+        # avg_fluxes = np.abs(np.array(avg_fluxes) - minmax_flux)
+        # pl.plot(avg_dists, avg_fluxes, 'd-')
+        b_over_flux = (avg_b-(avg_b.min())) / fluxes
+        pl.figure(fluxes_vs_dists.number)
+        pl.plot(fluxes, avg_b, 'd-')
+        # pl.errorbar(avg_dists, b_over_flux, yerr=avg_fluxes_errs,
+                # hold=True)
+        pl.figure(fluxes_vs_flux.number)
+        # delta_r = np.diff(avg_dists)
+        delta_flux = np.diff(fluxes)
+        # dr_b_over_r = np.diff(b_over_r) / delta_r
+        dr_b_over_flux = np.diff(b_over_flux) / delta_flux
+        # pl.plot(avg_dists, (avg_fluxes-avg_fluxes.min()) / avg_dists, 'x-')
+        pl.plot(fluxes[:-1], dr_b_over_flux, 'x-')
+        # pl.errorbar(avg_dists[:-1], dr_b_over_r, 
+                # xerr=avg_dists_errs[:-1],
+                # yerr=avg_fluxes_errs[:-1],
+                # hold=True)
+        raw_input("enter to continue")
+    pl.figure(fluxes_vs_dists.number)
+    pl.grid()
+    pl.figure(fluxes_vs_flux.number)
+    pl.grid()
+    import pdb; pdb.set_trace()
+    pl.close('all')
 
-# test_contour_tree()
-
-"""
-n=-1:
-    (array([858, 192,  95,  59,  50,  28,  22,  12,  16,   9,   4,   3,   4,
-             1,   8,   3,   2,   4,   4,   0,   0,   0,   2,   0,   1,   2,
-             0,   2,   0,   0,   0,   0,   0,   0,   0,   0,   2]),
-     array([  2.00000000e+00,   1.86756757e+02,   3.71513514e+02,
-             5.56270270e+02,   7.41027027e+02,   9.25783784e+02,
-             1.11054054e+03,   1.29529730e+03,   1.48005405e+03,
-             1.66481081e+03,   1.84956757e+03,   2.03432432e+03,
-             2.21908108e+03,   2.40383784e+03,   2.58859459e+03,
-             2.77335135e+03,   2.95810811e+03,   3.14286486e+03,
-             3.32762162e+03,   3.51237838e+03,   3.69713514e+03,
-             3.88189189e+03,   4.06664865e+03,   4.25140541e+03,
-             4.43616216e+03,   4.62091892e+03,   4.80567568e+03,
-             4.99043243e+03,   5.17518919e+03,   5.35994595e+03,
-             5.54470270e+03,   5.72945946e+03,   5.91421622e+03,
-             6.09897297e+03,   6.28372973e+03,   6.46848649e+03,
-             6.65324324e+03,   6.83800000e+03]))
-"""
+test_radial_profiles()

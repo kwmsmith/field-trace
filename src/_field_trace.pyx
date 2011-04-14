@@ -8,9 +8,9 @@ cdef inline int sign(double a):
     elif a > 0.0: return 1
     else: return 0
 
-def same_sign_or_zero(double a0, double a1, double a2, double a3):
+def same_sign_or_zero(double a0, double a1, double a2, double a3, double lval=0.0):
     cdef double arr[4]
-    arr[0] = a0; arr[1] = a1; arr[2] = a2; arr[3] = a3
+    arr[0] = a0-lval; arr[1] = a1-lval; arr[2] = a2-lval; arr[3] = a3-lval
     cdef int i
     cdef int sign0, signi
 

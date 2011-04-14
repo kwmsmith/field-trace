@@ -106,8 +106,12 @@ class TopoSurface(object):
 
     def get_minmax_regions(self):
         passes = self.crit_pts.passes
-        all_regions = dict([(pit, self.get_minmax_region(pit, passes)) for pit in self.crit_pts.pits])
-        all_regions.update([(peak, self.get_minmax_region(peak, passes)) for peak in self.crit_pts.peaks])
+        pit_regions = dict([((pit, 'pit'), self.get_minmax_region(pit, passes)) \
+                for pit in self.crit_pts.pits])
+        peak_regions = dict([((peak, 'peak'), self.get_minmax_region(peak, passes)) \
+                for peak in self.crit_pts.peaks])
+        all_regions = pit_regions
+        all_regions.update(peak_regions)
         return all_regions
 
     def get_minmax_region(self, node, passes):
