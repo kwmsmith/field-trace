@@ -255,6 +255,8 @@ class TopoSurface(object):
             raise ValueError("given node not in peaks or pits")
         passes = [(dd['dh'], p) for p, dd in passes.items()]
         passes.sort()
+        if not passes:
+            return set()
         c_pass_h, c_pass = passes[0]
         rest_passes = passes[1:]
         if node in self.crit_pts.pits:

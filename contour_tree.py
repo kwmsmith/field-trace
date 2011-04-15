@@ -423,3 +423,12 @@ def bounding_box(pts, nx, ny):
     lower_y = upper_y+1
     return (Xs[lower_x]%nx, Xs[upper_x]%nx,
             Ys[lower_y]%ny, Ys[upper_y]%ny)
+
+def box_center(xlower, xupper, ylower, yupper, nx, ny):
+    if xlower > xupper:
+        xlower += nx
+    if ylower > yupper:
+        ylower += ny
+    return (((xupper + xlower) / 2) % nx,
+            ((yupper + ylower) / 2) % ny)
+
