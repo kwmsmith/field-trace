@@ -107,11 +107,12 @@ def visualize(
         mesh=None,
         crit_pts=None,
         surf_network=None,
+        len_lim=None,
         cmap=None,
         ncontours=None,
         new_fig=True,
         save_fig=None,
-        exts=('.eps', '.png')
+        exts=('.eps', '.png', '.pdf')
         ):
 
     # import pylab as pl
@@ -119,6 +120,7 @@ def visualize(
         fig = pl.figure()
     # pl.imshow(arr, interpolation='nearest', cmap='jet')
     pl.imshow(arr, cmap=cmap, interpolation='nearest')
+    pl.colorbar(pad=0.0, shrink=0.9)
     if ncontours is not None:
         pl.contour(arr, ncontours, linewidths=2, cmap=pl.cm.hot)
     nx, ny = arr.shape
@@ -134,18 +136,20 @@ def visualize(
             nbrs = surf_network[node]
             for nbr in nbrs:
                 nbr_x, nbr_y = nbr
-                pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--')
+                if len_lim and abs(node_y-nbr_y) < nx /2 and abs(node_x-nbr_x) < ny /2:
+                    pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--', linewidth=2)
     if crit_pts is not None:
+        size=70
         pits, passes, peaks = crit_pts.pits, crit_pts.passes, crit_pts.peaks
         X = [_[0] for _ in pits]
         Y = [_[1] for _ in pits]
-        pl.scatter(Y, X, marker='o', c='b', s=50)
+        pl.scatter(Y, X, marker='o', c='b', s=size)
         X = [_[0] for _ in peaks]
         Y = [_[1] for _ in peaks]
-        pl.scatter(Y, X, marker='d', c='r', s=50)
+        pl.scatter(Y, X, marker='s', c='r', s=size)
         X = [_[0] for _ in passes]
         Y = [_[1] for _ in passes]
-        pl.scatter(Y, X, marker='d', c='k', s=50)
+        pl.scatter(Y, X, marker='d', c='k', s=size)
     if new_fig:
         pl.figure(fig.number)
     else:
