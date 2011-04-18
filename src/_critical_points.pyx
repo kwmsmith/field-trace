@@ -245,6 +245,59 @@ class TopoSurface(object):
             for cn in changed_nodes:
                 heapq.heappush(pqueue, (snet.node[cn], cn))
 
+    def is_removable_edge(self, snet, pss, node, peakorpit):
+        if peakorpit == 'peak':
+            nbrs = snet.successors(node)
+            if len(nbrs) == 1:
+                return False
+            nearest = max([self.node_height(p) for p in nbrs])
+        elif peakorpit == 'pit':
+            nbrs = snet.predecessors(node)
+            if len(nbrs) == 1:
+                return False
+            nearest = min([self.node_height(p) for p in nbrs])
+        if nearest[1] == pss:
+            return False
+        return True
+
+    def is_morse(self, pss):
+        snet = self.surf_network
+        if len(snet.predecessors(pss)) != 2:
+            return False
+        if len(snet.successors(pss)) != 2:
+            return False
+        return True
+
+    def is_orphan_peak_pit(self, snet, pp):
+        return not (snet.successors(pp) + snet.predecessors(pp))
+
+    def regularize_surf_network(self, snet):
+        crit_pts = self.crit_pts
+        # every pass should be connected to 2 distinct peaks & 2 distinct pits.
+        for pss in crit_pts.passes:
+            cpeaks = snet.predecessors(pss)
+            cpits  = snet.successors(pss)
+            if len(cpeaks) > 2:
+                onodes = sorted([(self.node_height(cpeak), cpeak) for cpeak in cpeaks])
+                for h, onode in onodes:
+                    if len(snet.predecessors(pss)) == 2:
+                        break
+                    if self.is_removable_edge(snet, pss, onode, 'peak'):
+                        snet.remove_edge(onode, pss)
+                        assert not self.is_orphan_peak_pit(snet, onode)
+            if len(cpits) > 2:
+                onodes = sorted([(self.node_height(cpit), cpit) for cpit in cpits])
+                onodes.reverse()
+                for h, onode in onodes:
+                    if len(snet.successors(pss)) == 2:
+                        break
+                    if self.is_removable_edge(snet, pss, onode, 'pit'):
+                        snet.remove_edge(pss, onode)
+                        assert not self.is_orphan_peak_pit(snet, onode)
+            assert not self.is_orphan_peak_pit(snet, pss)
+            # assert len(snet.predecessors(pss)) <= 2
+            # assert len(snet.successors(pss)) <= 2
+
     def contract_surf_network(self, node, measure=None):
         snet = self.surf_network
         if node in self.crit_pts.pits:
@@ -258,6 +311,8 @@ class TopoSurface(object):
         if not passes:
             return set()
         c_pass_h, c_pass = passes[0]
+        if not self.is_morse(c_pass):
+            return set()
         rest_passes = passes[1:]
         if node in self.crit_pts.pits:
             other_nodes = snet.succ[c_pass]
@@ -337,6 +392,7 @@ class TopoSurface(object):
                 assert dh > 0.0
                 snet.add_edge(p, pit, dh=dh)
         self._surf_network = snet
+        self.regularize_surf_network(snet)
         return snet
 
     surf_network = property(_get_surface_network)

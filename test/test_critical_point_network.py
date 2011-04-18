@@ -27,31 +27,32 @@ def add_noise(arr, rms_frac=0.001):
     noise = np.random.normal(scale=rms_frac*rms, size=arr.shape)
     return arr + noise
 
-def verify_snet(snet, crit_pts, at_least_n_pass_nbrs=4):
+def verify_snet(snet, crit_pts):
     peaks  = crit_pts.peaks
     passes  = crit_pts.passes
     pits  = crit_pts.pits
     non_morse_passes = set()
+    disconnected_pps = set()
     for pss in passes:
         cpeaks = snet.predecessors(pss)
         cpits  = snet.successors(pss)
-        pass_nbrs = cpeaks + cpits
-        ok_(len(pass_nbrs) >= at_least_n_pass_nbrs)
-        if len(pass_nbrs) > 4:
-            non_morse_passes.add((pss, len(pass_nbrs)))
+        if len(cpeaks) != 2 or len(cpits) != 2:
+            non_morse_passes.add(pss)
         for cpk in cpeaks:
-            ok_(cpk in peaks)
+            assert cpk in peaks
         for cpit in cpits:
-            ok_(cpit in pits)
+            assert cpit in pits
     for pp in pits.union(peaks):
         if pp in pits:
             pp_nbrs = snet.predecessors(pp)
         elif pp in peaks:
             pp_nbrs = snet.successors(pp)
-        ok_(pp_nbrs)
+        if not pp_nbrs:
+            disconnected_pps.add(pp)
         for pn in pp_nbrs:
-            ok_(pn in passes)
-    return non_morse_passes
+            assert pn in passes
+    return non_morse_passes, disconnected_pps
+
 
 def test_critical_points():
 
