@@ -13,7 +13,7 @@ def get_dist_map(regions_0, regions_1, nx, ny):
         dist_map[i, :] = wdist(region0[0], region0[1], x1, y1)
     return dist_map
 
-dist_weight = 1.0
+dist_weight = 1000.0
 area_weight = 0.0
 val_weight = 0.0
 
@@ -59,20 +59,6 @@ def _track_forward_backward(regions_0, regions_1, nx, ny):
 
     import pdb; pdb.set_trace()
 
-class KDTwraparound(object):
-
-    def __init__(self, pts, nx, ny):
-        self.nx, self.ny = nx, ny
-        self.all_pts = np.vstack([
-            pts+[-nx,-ny], pts+[-nx,0], pts+[-nx,+ny],
-            pts+[  0,-ny], pts        , pts+[  0,+ny],
-            pts+[+nx,-ny], pts+[+nx,0], pts+[+nx,+ny],
-            ])
-        self.kdt = cKDTree(self.all_pts)
-
-    def query(self, pts, k):
-        d, i = self.kdt.query(pts, k=k, p=2)
-        return d, (self.all_pts[i] % [self.nx, self.ny])
 
 def normalize_regions(all_regions, maxdiff):
     maxdiff = float(maxdiff)
@@ -112,15 +98,15 @@ def track_regions_greedy(all_regions, nx, ny):
     normalize_regions(all_regions, nx/2)
     r0s = all_regions[0]
     # area_cutoff = np.median(np.array([r.area for r in r0s]))
-    area_cutoff = 0.5
+    area_cutoff = -1.0
     regions0 = all_regions[0]
     regions0 = sorted(regions0, key=lambda x: x.area)
-    regions0 = [r for r in regions0 if r.area > area_cutoff]
+    # regions0 = [r for r in regions0 if r.area > area_cutoff]
     tslice_maps = []
     for idx in range(len(all_regions)-1):
         regions1 = all_regions[idx+1]
         regions1 = sorted(regions1, key=lambda x: x.area)
-        regions1 = [r for r in regions1 if r.area > area_cutoff]
+        # regions1 = [r for r in regions1 if r.area > area_cutoff]
         r0_to_r1 = {}
         for region0 in regions0:
             best_r1 = min([(fitness(region0, region1, wdist(region0.loc, region1.loc)), region1)

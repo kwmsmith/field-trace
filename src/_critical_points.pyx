@@ -30,6 +30,28 @@ cdef int connect_diagonal(double a, double b, double c, double d):
     # return envelope(a, b, c, d)
     # return AC
 
+cdef void neighbors6(int x, int y, int nx, int ny, int *result):
+    '''
+    result is a 12 element integer array that holds the neighbor's x & y components.
+    '''
+    result[0] = (x-1+nx) % nx
+    result[1] = (y-1+ny) % ny
+
+    result[2] = (x-1+nx) % nx
+    result[3] = y
+
+    result[4] = x
+    result[5] = (y+1) % ny
+
+    result[6] = (x+1) % nx
+    result[7] = (y+1) % ny
+
+    result[8] = (x+1) % nx
+    result[9] = y
+
+    result[10] = x
+    result[11] = (y-1+ny) % ny
+
 class graph(object):
 
     def __init__(self):
@@ -95,6 +117,9 @@ def _get_lowest_neighbor(h_sorted_mesh, node):
 def _get_highest_neighbor(h_sorted_mesh, node):
     return h_sorted_mesh[node][-1]
 
+from collections import namedtuple
+crit_pts = namedtuple('crit_pts', 'peaks pits passes')
+
 class TopoSurface(object):
 
     def __init__(self, arr):
@@ -102,6 +127,25 @@ class TopoSurface(object):
         self.mesh = self.get_mesh()
         self.h_sorted_mesh = sort_by_h(self.mesh, self.arr)
         self.crit_pts = self.get_crit_pts()
+        self._surf_network = None
+
+    def __getstate__(self):
+        return {
+                'arr': self.arr,
+                'mesh': self.mesh,
+                'h_sorted_mesh': self.h_sorted_mesh,
+                'peaks': self.crit_pts.peaks,
+                'pits' : self.crit_pts.pits,
+                'passes': self.crit_pts.passes,
+                }
+
+    def __setstate__(self, state):
+        self.arr = state['arr']
+        self.mesh = state['mesh']
+        self.h_sorted_mesh = state['h_sorted_mesh']
+        self.crit_pts = crit_pts(peaks=state['peaks'],
+                                 pits=state['pits'],
+                                 passes=state['passes'])
         self._surf_network = None
 
     def get_minmax_regions(self):
@@ -164,16 +208,12 @@ class TopoSurface(object):
     def get_crit_pts(self):
         cdef double diff_neg, diff_pos, diff1, diff2
         cdef int n_change, idx
-        from collections import namedtuple
-        cps = namedtuple('crit_pts', 'peaks pits passes')
-        crit_pts = {'peaks': set(),
-                   'pits' : set(),
-                   'passes' : set(),
-                   }
+        cdef set peaks = set()
+        cdef set pits = set()
+        cdef set passes = set()
         for node in self.mesh._g:
             nbrs = self.mesh._g[node]
             diffs = [self.arr[n] - self.arr[node] for n in nbrs]
-            # assert any(diffs)
             diff_neg = diff_pos = 0.0
             for d in diffs:
                 dd = d
@@ -192,12 +232,12 @@ class TopoSurface(object):
                     n_change += 1
             if n_change == 0:
                 if diff_neg > 0 and diff_pos == 0.0:
-                    crit_pts['peaks'].add(node)
+                    peaks.add(node)
                 elif diff_pos > 0 and diff_neg == 0.0:
-                    crit_pts['pits'].add(node)
+                    pits.add(node)
             elif (n_change >= 4 and not n_change % 2) and (diff_pos + diff_neg) > 0:
-                crit_pts['passes'].add(node)
-        return cps(crit_pts['peaks'], crit_pts['pits'], crit_pts['passes'])
+                passes.add(node)
+        return crit_pts(peaks=_crit_pts['peaks'], pits=_crit_pts['pits'], passes=_crit_pts['passes'])
     
     def nearest_extrema(self, pss):
         pass_nbrs = self.mesh._g[pss]
