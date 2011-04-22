@@ -93,18 +93,18 @@ class TrackRegion(object):
     def __hash__(self):
         return hash(self.loc) + hash(self.area) + hash(self.val) + hash(self.ispeak)
 
-def track_regions_greedy(all_regions, nx, ny):
+def track_regions_greedy(tslice_to_regions, nx, ny, reverse=False):
+    '''
+    tslice_to_regions -- (t, region) tuple list
+    '''
+    all_regions = [r for t,r in tslice_to_regions]
     wdist = wraparound_dist(nx, ny)
     normalize_regions(all_regions, nx/2)
-    r0s = all_regions[0]
-    # area_cutoff = np.median(np.array([r.area for r in r0s]))
-    area_cutoff = -1.0
-    regions0 = all_regions[0]
+    t0, regions0 = tslice_to_regions[0]
     regions0 = sorted(regions0, key=lambda x: x.area)
     # regions0 = [r for r in regions0 if r.area > area_cutoff]
     tslice_maps = []
-    for idx in range(len(all_regions)-1):
-        regions1 = all_regions[idx+1]
+    for t1, regions1 in tslice_to_regions[1:]:
         regions1 = sorted(regions1, key=lambda x: x.area)
         # regions1 = [r for r in regions1 if r.area > area_cutoff]
         r0_to_r1 = {}
@@ -112,20 +112,24 @@ def track_regions_greedy(all_regions, nx, ny):
             best_r1 = min([(fitness(region0, region1, wdist(region0.loc, region1.loc)), region1)
                 for region1 in regions1])[1]
             r0_to_r1[region0] = best_r1
-        tslice_maps.append(r0_to_r1)
-        regions0 = regions1
+        tslice_maps.append((t0, r0_to_r1))
+        t0, regions0 = t1, regions1
     # make tracks out of the tslice_maps list.
     tracks = []
-    for idx, map in enumerate(tslice_maps):
+    if reverse:
+        offset = -1
+    else:
+        offset = 1
+    for tslice, map in tslice_maps:
         # handle those that are in ``tracks``
         for track in tracks:
             if track[-1][1] in map:
                 reg = track[-1][1]
-                track.append((idx+1, map[reg]))
+                track.append((tslice+offset, map[reg]))
                 del map[reg]
         # start a new track for everything else
         for reg in map:
-            tracks.append([(idx, reg), (idx+1, map[reg])])
+            tracks.append([(tslice, reg), (tslice+offset, map[reg])])
     return tracks
 
 def track_regions_anneal(regions_0, regions_1, nx, ny, nnbrs=5):

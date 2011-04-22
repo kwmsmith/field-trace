@@ -1,7 +1,7 @@
 
 def configure(conf):
     print "in src/configure"
-    conf.env.CFLAGS = "-Wall -O3".split()
+    # conf.env.CFLAGS = "-Wall -O3".split()
     # conf.env.CFLAGS = "-Wall -g -dH".split()
     # conf.env.LDFLAGS = "-dH"
     conf.env.INCLUDES = "../src /opt/local/include".split()

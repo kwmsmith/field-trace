@@ -42,7 +42,28 @@ def get_cached_surfs(h5fname, sigma=None, force=False):
         dump(sigma, fh)
     return surfs, sigma
 
-def extract_regions(h5fname, sigma=None, force=False):
+def extract_regions(h5fname, sigma=None):
+    dta = tables.openFile(h5fname, 'r')
+    psigp = dta.getNode('/psi')._v_children
+    regions = []
+    for idx, psi_arr_name in enumerate(sorted(psigp)):
+        print psi_arr_name
+        psi_arr = psigp[psi_arr_name].read()
+        if sigma is not None:
+            psi_arr = gaussian_filter(psi_arr, sigma=sigma, mode='wrap')
+        surf = _cp.TopoSurface(psi_arr)
+        # surf.simplify_surf_network(surf.get_peak_pit_region_area, threshold=100)
+        psi_regions = surf.get_minmax_regions()
+        tslice = []
+        for (cpt, type) in psi_regions:
+            area = len(psi_regions[cpt, type])
+            minmax = psi_arr[cpt]
+            tslice.append(TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak')))
+        regions.append((idx, tslice))
+    dta.close()
+    return regions
+
+def extract_regions_cached(h5fname, sigma=None, force=False):
     saved_name = path.realpath(h5fname)+'_pickled_regions'
     if not force:
         try:
@@ -55,31 +76,14 @@ def extract_regions(h5fname, sigma=None, force=False):
             fh.close()
             return regions, sigma
     # rebuild the regions list.
-    dta = tables.openFile(h5fname, 'r')
-    psigp = dta.getNode('/psi')._v_children
-    regions = []
-    for psi_arr_name in sorted(psigp):
-        print psi_arr_name
-        psi_arr = psigp[psi_arr_name].read()
-        if sigma is not None:
-            psi_arr = gaussian_filter(psi_arr, sigma=sigma, mode='wrap')
-        surf = _cp.TopoSurface(psi_arr)
-        # surf.simplify_surf_network(surf.get_peak_pit_region_area, threshold=4)
-        psi_regions = surf.get_minmax_regions()
-        tslice = []
-        for (cpt, type) in psi_regions:
-            area = len(psi_regions[cpt, type])
-            minmax = psi_arr[cpt]
-            tslice.append(TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak')))
-        regions.append(tslice)
-    dta.close()
+    regions = extract_regions(h5fname, sigma=sigma)
     with open(saved_name, 'w') as fh:
         dump(regions, fh)
         dump(sigma, fh)
     return regions, sigma
 
-def track_regions_image(slice_pts, h5fname):
-    all_regions, sigma = extract_regions('data.h5')
+def track_regions_image(slice_pts, h5fname, sigma):
+    tslice_to_regions = extract_regions('data.h5', sigma=sigma)
     dta = tables.openFile(h5fname, 'r')
     psigp = dta.getNode('/psi')._v_children
     pl.ioff()
@@ -90,8 +94,8 @@ def track_regions_image(slice_pts, h5fname):
         pl.imshow(psi_arr, interpolation='nearest', cmap='hot')
         for (loc, num) in slice_pts[idx]:
             pl.text(loc[1], loc[0], str(num))
-        xs = [reg.loc[0] for reg in all_regions[idx]]
-        ys = [reg.loc[1] for reg in all_regions[idx]]
+        xs = [reg.loc[0] for reg in tslice_to_regions[idx][1]]
+        ys = [reg.loc[1] for reg in tslice_to_regions[idx][1]]
         pl.scatter(ys, xs, c='r', marker='s')
         pl.savefig('psi_%03d.pdf' % idx)
         pl.close('all')
@@ -133,21 +137,25 @@ def plot_track_props(tracks, nx, ny):
 
 def test_track_greedy():
     nx, ny = 512, 512
-    all_regions = extract_regions('data.h5')
-    tracks = tracking.track_regions_greedy(all_regions, nx, ny)
+    sigma = 4.0
+    tslice_to_regions = extract_regions('data.h5', sigma=sigma)
+    tracks = tracking.track_regions_greedy(tslice_to_regions, nx, ny)
+    reverse_tracks = tracking.track_regions_greedy(list(reversed(tslice_to_regions)), nx, ny, reverse=True)
     pl.ion()
     # val_fig = pl.figure()
     # area_fig = pl.figure()
     # psn_fig = pl.figure()
-    maxlen = len(all_regions)
-    tracks = [tr for tr in tracks if len(tr) >= 0.5 * maxlen]
+    maxlen = len(tslice_to_regions)
+    # tracks = [tr for tr in tracks if len(tr) >= 0.3 * maxlen]
+    # rev_tracks = [tr for tr in reverse_tracks if len(tr) >= 0.3 * maxlen]
+    tracks = reverse_tracks
     from collections import defaultdict
     slice_pts = defaultdict(list)
     for num, tr in enumerate(tracks):
         for idx, reg in tr:
             slice_pts[idx].append((reg.loc, num))
     plot_track_props(tracks, nx, ny)
-    track_regions_image(slice_pts, 'data.h5')
+    track_regions_image(slice_pts, 'data.h5', sigma=sigma)
     # for tr in tracks:
         # idxs, regs = zip(*tr)
         # pl.figure(val_fig.number)

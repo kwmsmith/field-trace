@@ -1,5 +1,7 @@
 # cython: profile=True
 
+cimport numpy as np
+import numpy as np
 from pprint import pprint, pformat
 
 import networkx as netx
@@ -30,6 +32,7 @@ cdef int connect_diagonal(double a, double b, double c, double d):
     # return envelope(a, b, c, d)
     # return AC
 
+DEF NNBRS = 6
 cdef void neighbors6(int x, int y, int nx, int ny, int *result):
     '''
     result is a 12 element integer array that holds the neighbor's x & y components.
@@ -111,11 +114,35 @@ def sort_by_h(gr, arr):
         sgr[node] = h_sort
     return sgr
 
-def _get_lowest_neighbor(h_sorted_mesh, node):
-    return h_sorted_mesh[node][0]
+cdef _get_highest_neighbor(np.ndarray[double, ndim=2] arr, node):
+    cdef int nbrs[2*NNBRS]
+    cdef int i, highest_x, highest_y
+    nx = arr.shape[0]
+    ny = arr.shape[1]
+    neighbors6(node[0], node[1], nx, ny, nbrs)
+    cdef double highest_val = -1e100, val
+    for i in range(NNBRS):
+        val = arr[nbrs[2*i], nbrs[2*i+1]]
+        if val > highest_val:
+            highest_val = val
+            highest_x = nbrs[2*i]
+            highest_y = nbrs[2*i+1]
+    return highest_x, highest_y
 
-def _get_highest_neighbor(h_sorted_mesh, node):
-    return h_sorted_mesh[node][-1]
+cdef _get_lowest_neighbor(np.ndarray[double, ndim=2] arr, node):
+    cdef int nbrs[2*NNBRS]
+    cdef int i, lowest_x, lowest_y
+    nx = arr.shape[0]
+    ny = arr.shape[1]
+    neighbors6(node[0], node[1], nx, ny, nbrs)
+    cdef double lowest_val = 1e100, val
+    for i in range(NNBRS):
+        val = arr[nbrs[2*i], nbrs[2*i+1]]
+        if val < lowest_val:
+            lowest_val = val
+            lowest_x = nbrs[2*i]
+            lowest_y = nbrs[2*i+1]
+    return lowest_x, lowest_y
 
 from collections import namedtuple
 crit_pts = namedtuple('crit_pts', 'peaks pits passes')
@@ -123,30 +150,29 @@ crit_pts = namedtuple('crit_pts', 'peaks pits passes')
 class TopoSurface(object):
 
     def __init__(self, arr):
-        self.arr = arr
-        self.mesh = self.get_mesh()
-        self.h_sorted_mesh = sort_by_h(self.mesh, self.arr)
+        self.nx, self.ny = arr.shape
+        self.arr = np.asarray(arr, dtype=np.double)
         self.crit_pts = self.get_crit_pts()
         self._surf_network = None
 
-    def __getstate__(self):
-        return {
-                'arr': self.arr,
-                'mesh': self.mesh,
-                'h_sorted_mesh': self.h_sorted_mesh,
-                'peaks': self.crit_pts.peaks,
-                'pits' : self.crit_pts.pits,
-                'passes': self.crit_pts.passes,
-                }
+    # def __getstate__(self):
+        # return {
+                # 'arr': self.arr,
+                # 'mesh': self.mesh,
+                # 'h_sorted_mesh': self.h_sorted_mesh,
+                # 'peaks': self.crit_pts.peaks,
+                # 'pits' : self.crit_pts.pits,
+                # 'passes': self.crit_pts.passes,
+                # }
 
-    def __setstate__(self, state):
-        self.arr = state['arr']
-        self.mesh = state['mesh']
-        self.h_sorted_mesh = state['h_sorted_mesh']
-        self.crit_pts = crit_pts(peaks=state['peaks'],
-                                 pits=state['pits'],
-                                 passes=state['passes'])
-        self._surf_network = None
+    # def __setstate__(self, state):
+        # self.arr = state['arr']
+        # self.mesh = state['mesh']
+        # self.h_sorted_mesh = state['h_sorted_mesh']
+        # self.crit_pts = crit_pts(peaks=state['peaks'],
+                                 # pits=state['pits'],
+                                 # passes=state['passes'])
+        # self._surf_network = None
 
     def get_minmax_regions(self):
         passes = self.crit_pts.passes
@@ -166,7 +192,12 @@ class TopoSurface(object):
         else:
             raise ValueError("node not in peaks or pits")
         cdef set region = set([node])
-        cdef list frontier = [(self.node_height(n, sign=sign), n) for n in self.mesh._g[node]]
+        cdef list frontier = []
+        cdef int nbrs[NNBRS*2]
+        neighbors6(node[0], node[1], self.nx, self.ny, nbrs)
+        for i in range(NNBRS):
+            n = nbrs[i*2], nbrs[(2*i)+1]
+            frontier.append((self.node_height(n, sign=sign), n))
         cdef set frontier_set = set([n for h,n in frontier])
         heapq.heapify(frontier)
         while True:
@@ -175,83 +206,70 @@ class TopoSurface(object):
             region.add(n)
             if n in passes:
                 break
-            nbrs = self.mesh._g[n]
-            for nbr in nbrs:
+            neighbors6(n[0], n[1], self.nx, self.ny, nbrs)
+            for i in range(NNBRS):
+                nbr = nbrs[2*i], nbrs[2*i+1]
                 if nbr not in region and nbr not in frontier_set:
                     frontier_set.add(nbr)
                     heapq.heappush(frontier, (self.node_height(nbr, sign=sign), nbr))
         return region
 
-    def get_mesh(self):
-        G = graph()
-        nx, ny = self.arr.shape
-        for i in range(nx):
-            for j in range(ny):
-                # connect along the cardinal directions
-                G.add_edge((i,j), ((i+1)%nx, j))
-                G.add_edge((i,j), ((i-1)%nx, j))
-                G.add_edge((i,j), (i, (j+1)%ny))
-                G.add_edge((i,j), (i, (j-1)%ny))
-                a = self.arr[i,j]
-                b = self.arr[i,(j+1)%ny]
-                c = self.arr[(i+1)%nx, (j+1)%ny]
-                d = self.arr[(i+1)%nx, j]
-                if connect_diagonal(a, b, c, d) == AC:
-                    G.add_edge((i,j), ((i+1)%nx, (j+1)%ny))
-                elif connect_diagonal(a, b, c, d) == BD:
-                    G.add_edge((i,(j+1)%ny), ((i+1)%nx, j))
-                else:
-                    raise RuntimeError("invalid return value from connect_diagonal")
-        G.order_neighbors(self.arr.shape)
-        return G
-
     def get_crit_pts(self):
+        cdef np.ndarray[double, ndim=2] arr = self.arr
+        cdef int nbrs[2*NNBRS]
+        cdef double diffs[NNBRS], node_val
         cdef double diff_neg, diff_pos, diff1, diff2
-        cdef int n_change, idx
+        cdef int n_change, idx, ix, iy, ii
         cdef set peaks = set()
         cdef set pits = set()
         cdef set passes = set()
-        for node in self.mesh._g:
-            nbrs = self.mesh._g[node]
-            diffs = [self.arr[n] - self.arr[node] for n in nbrs]
-            diff_neg = diff_pos = 0.0
-            for d in diffs:
-                dd = d
-                if dd < 0:
-                    diff_neg += -dd
-                else:
-                    diff_pos += dd
-            n_change = 0
-            for idx in range(len(diffs)):
-                diff1 = diffs[idx-1]
-                diff2 = diffs[idx]
-                # if diffs[idx] == 0.0 and diffs[idx-1] * diffs[(idx+1)%len(diffs)] < 0:
-                    # n_change += 1
-                # elif diffs[idx-1] * diffs[idx] < 0:
-                if diff1 * diff2 < 0:
-                    n_change += 1
-            if n_change == 0:
-                if diff_neg > 0 and diff_pos == 0.0:
-                    peaks.add(node)
-                elif diff_pos > 0 and diff_neg == 0.0:
-                    pits.add(node)
-            elif (n_change >= 4 and not n_change % 2) and (diff_pos + diff_neg) > 0:
-                passes.add(node)
-        return crit_pts(peaks=_crit_pts['peaks'], pits=_crit_pts['pits'], passes=_crit_pts['passes'])
+        for ix in range(self.nx):
+            for iy in range(self.ny):
+                neighbors6(ix, iy, self.nx, self.ny, nbrs)
+                node_val = arr[ix, iy]
+                node = (ix, iy)
+                for ii in range(NNBRS):
+                    diffs[ii] = arr[nbrs[2*ii], nbrs[2*ii+1]] - node_val
+                diff_neg = diff_pos = 0.0
+                for ii in range(NNBRS):
+                    dd = diffs[ii]
+                    if dd < 0:
+                        diff_neg += -dd
+                    else:
+                        diff_pos += dd
+                n_change = 0
+                for idx in range(NNBRS):
+                    diff1 = diffs[(idx-1+NNBRS)%NNBRS]
+                    diff2 = diffs[idx]
+                    # if diffs[idx] == 0.0 and diffs[idx-1] * diffs[(idx+1)%len(diffs)] < 0:
+                        # n_change += 1
+                    # elif diffs[idx-1] * diffs[idx] < 0:
+                    if diff1 * diff2 < 0:
+                        n_change += 1
+                if n_change == 0:
+                    if diff_neg > 0 and diff_pos == 0.0:
+                        peaks.add(node)
+                    elif diff_pos > 0 and diff_neg == 0.0:
+                        pits.add(node)
+                elif (n_change >= 4 and not n_change % 2) and (diff_pos + diff_neg) > 0:
+                    passes.add(node)
+        return crit_pts(peaks=peaks, pits=pits, passes=passes)
     
     def nearest_extrema(self, pss):
-        pass_nbrs = self.mesh._g[pss]
+        cdef int pass_nbrs[2*NNBRS]
+        neighbors6(pss[0], pss[1], self.nx, self.ny, pass_nbrs)
         peaks_n_pits = self.crit_pts.peaks.union(self.crit_pts.pits)
         connected_peaks = set()
         connected_pits = set()
-        for nbr in pass_nbrs:
+        for i in range(NNBRS):
+            nbr = pass_nbrs[2*i], pass_nbrs[2*i+1]
             # go up from every neighbor.
             cur = nbr
             while True:
                 if cur in self.crit_pts.peaks:
                     connected_peaks.add(cur)
                     break
-                cur = _get_highest_neighbor(self.h_sorted_mesh, cur)
+                cur = _get_highest_neighbor(self.arr, cur)
                 if cur == pss or cur in pass_nbrs:
                     # returned to a previously visited spot; ignore these.
                     break
@@ -261,7 +279,7 @@ class TopoSurface(object):
                 if cur in self.crit_pts.pits:
                     connected_pits.add(cur)
                     break
-                cur = _get_lowest_neighbor(self.h_sorted_mesh, cur)
+                cur = _get_lowest_neighbor(self.arr, cur)
                 if cur == pss or cur in pass_nbrs:
                     # returned to a previously visited spot; ignore these.
                     break
