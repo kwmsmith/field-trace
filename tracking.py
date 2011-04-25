@@ -1,10 +1,5 @@
-from anneal_discrete import Annealer
 from contour_tree import wraparound_dist_vec, wraparound_dist
 import numpy as np
-
-from collections import defaultdict
-
-from scipy.spatial import cKDTree
 
 def get_dist_map(regions_0, regions_1, nx, ny):
     wdist = wraparound_dist_vec(nx, ny)

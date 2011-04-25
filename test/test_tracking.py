@@ -2,7 +2,6 @@ from os import path
 import tables
 import tracking
 from tracking import TrackRegion
-import numpy as np
 import _critical_points as _cp
 from cPickle import load, dump
 
@@ -10,7 +9,6 @@ from contour_tree import wraparound_dist
 
 import pylab as pl
 
-from nose.tools import ok_, eq_
 from scipy.ndimage.filters import gaussian_filter
 
 def get_cached_surfs(h5fname, sigma=None, force=False):
