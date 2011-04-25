@@ -134,59 +134,20 @@ def plot_track_props(tracks, nx, ny):
     pl.savefig("delta_dists.pdf")
     pl.close('all')
 
+def get_slice_pts(tracks):
+    from collections import defaultdict
+    slice_pts = defaultdict(list)
+    tracks = [tr for tr in tracks if len(tr) > 2]
+    for num, tr in enumerate(tracks):
+        for idx, reg in tr:
+            slice_pts[idx].append((reg.loc, num))
+    return slice_pts
 
 def test_track_greedy():
     nx, ny = 512, 512
     sigma = 4.0
     tslice_to_regions = extract_regions('data.h5', sigma=sigma)
     tracks = tracking.track_regions_greedy(tslice_to_regions, nx, ny)
-    reverse_tracks = tracking.track_regions_greedy(list(reversed(tslice_to_regions)), nx, ny, reverse=True)
-    pl.ion()
-    # val_fig = pl.figure()
-    # area_fig = pl.figure()
-    # psn_fig = pl.figure()
-    maxlen = len(tslice_to_regions)
-    # tracks = [tr for tr in tracks if len(tr) >= 0.3 * maxlen]
-    # rev_tracks = [tr for tr in reverse_tracks if len(tr) >= 0.3 * maxlen]
-    tracks = reverse_tracks
-    from collections import defaultdict
-    slice_pts = defaultdict(list)
-    for num, tr in enumerate(tracks):
-        for idx, reg in tr:
-            slice_pts[idx].append((reg.loc, num))
+    slice_pts = get_slice_pts(tracks)
     plot_track_props(tracks, nx, ny)
     track_regions_image(slice_pts, 'data.h5', sigma=sigma)
-    # for tr in tracks:
-        # idxs, regs = zip(*tr)
-        # pl.figure(val_fig.number)
-        # pl.plot(idxs, [reg.val for reg in regs], 's-', hold=True)
-        # pl.figure(area_fig.number)
-        # pl.semilogy(idxs, [reg.area for reg in regs], 's-', hold=True)
-        # pl.figure(psn_fig.number)
-        # dists = [wdist(regs[i].loc, regs[i+1].loc) for i in range(len(regs)-1)]
-        # pl.plot(idxs[:-1], dists, 's-', hold=True)
-    # import pdb; pdb.set_trace()
-
-class _test_track(object):
-
-    def setUp(self):
-        self.npts = 500
-        self.nx = self.ny = 100
-        self.pts1 = np.random.randint(self.nx, size=(self.npts, 3))
-        self.pts1[:,2] = np.random.randint(1, 10, size=self.npts)
-        self.pts2 = np.random.randint(self.nx, size=(self.npts, 3))
-        self.pts2[:,2] = np.random.randint(1, 10, size=self.npts)
-
-    def _test_track_forward_backward(self):
-        tracking.track_forward_backward(self.pts1, self.pts2, self.nx, self.ny)
-
-
-    def test_track(self):
-        map = tracking.track_regions(self.pts1, self.pts2, self.nx, self.ny)
-        eq_(map, range(self.npts))
-        self.pts2 = self.pts1.copy()
-        self.pts2[0], self.pts2[1] = self.pts1[1], self.pts1[0]
-        map = tracking.track_regions(self.pts1, self.pts2, self.nx, self.ny)
-        check = range(self.npts)
-        check[0], check[1] = check[1], check[0]
-        eq_(map, check)
