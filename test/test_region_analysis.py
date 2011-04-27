@@ -28,9 +28,9 @@ def test_radial_profiles():
     pl.figure()
     pl.hold(True)
     linreg_xy = ([], [])
-    for minmax, rprof in rprofs.items():
+    for minmax, (rprof, region) in rprofs.items():
         # minmax_flux = arr_div[minmax]
-        pts, fluxes, avg_fluxes, avg_fluxes_errs, avg_dists, avg_dists_errs, region = \
+        pts, fluxes, avg_fluxes, avg_fluxes_errs, avg_dists, avg_dists_errs = \
                 zip(*rprof)
         linreg_xy[0].extend(fluxes)
         linreg_xy[1].extend(avg_fluxes)

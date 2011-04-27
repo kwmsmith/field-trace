@@ -1,3 +1,4 @@
+import _critical_points as _cp
 import pylab as pl
 import numpy as np
 
@@ -64,7 +65,7 @@ def flux_tube_radial_profile(region, minmax_pt, surf, peak_or_pit,
     nx, ny = arr.shape
     for seed in seed_points:
         seed_flux = arr[seed]
-        nbr_func = lambda t: surf.mesh._g[t]
+        nbr_func = lambda t: _cp.neighbors6(t[0], t[1], nx, ny)
         lset = _level_set(arr, level_val=seed_flux,
                 position=seed, neighbors_func=nbr_func)
         lset = lset.intersection(region)
@@ -83,11 +84,12 @@ def flux_tube_radial_profile(region, minmax_pt, surf, peak_or_pit,
     return radial_profile
 
 def expand_region(surf, region, ntimes):
-    mesh = surf.mesh
+    arr = surf.arr
+    nx, ny = arr.shape
     frontier = set()
     new_region = set(region)
     for pt in region:
-        nbrs = mesh._g[pt]
+        nbrs = _cp.neighbors6(pt[0], pt[1], nx, ny)
         for nbr in nbrs:
             if nbr not in region:
                 frontier.add(nbr)
@@ -95,7 +97,7 @@ def expand_region(surf, region, ntimes):
     for _ in range(ntimes-1):
         new_frontier = set()
         for pt in frontier:
-            nbrs = mesh._g[pt]
+            nbrs = _cp.neighbors6(pt[0], pt[1], nx, ny)
             for nbr in nbrs:
                 if nbr not in new_region:
                     new_frontier.add(nbr)

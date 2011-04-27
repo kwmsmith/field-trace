@@ -250,7 +250,11 @@ def _level_set(arr, level_val, position, neighbors_func=None):
         # for (i, j) in _field_trace.neighbors8(i0, j0, nx, ny):
             if (i,j) in marked:
                 continue
-            cvs = _get_corner_vals(arr, i, j)
+            try:
+                cvs = _get_corner_vals(arr, i, j)
+            except OverflowError:
+                print i, j
+                raise
             if not _field_trace.same_sign_or_zero(*cvs, lval=level_val):
                 marked.add((i, j))
                 front.append((i, j))

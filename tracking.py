@@ -1,3 +1,6 @@
+import _critical_points as _cp
+from scipy.ndimage import gaussian_filter
+import tables
 from contour_tree import wraparound_dist_vec, wraparound_dist
 import numpy as np
 
@@ -45,13 +48,42 @@ def normalize_regions(all_regions, maxdiff):
             r.area *= area_fac
             r.val *= val_fac
 
+_extract_regions_cache = {}
+def extract_regions(h5fname, sigma=None):
+    regions = _extract_regions_cache.get((h5fname, sigma), None)
+    if regions is not None:
+        return regions
+    dta = tables.openFile(h5fname, 'r')
+    regions = []
+    for idx, psi_arr in enumerate(dta.walkNodes('/psi', 'Array')):
+        psi_arr_name = psi_arr.name
+        psi_arr = psi_arr.read()
+        print psi_arr_name
+        if sigma is not None:
+            psi_arr = gaussian_filter(psi_arr, sigma=sigma, mode='wrap')
+        surf = _cp.TopoSurface(psi_arr)
+        # surf.simplify_surf_network(surf.get_peak_pit_region_area, threshold=100)
+        psi_regions = surf.get_minmax_regions()
+        tslice = []
+        for (cpt, type) in psi_regions:
+            region = psi_regions[cpt, type]
+            area = len(psi_regions[cpt, type])
+            minmax = psi_arr[cpt]
+            tslice.append(TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak'), region=region))
+        regions.append((idx, tslice))
+    dta.close()
+    _extract_regions_cache[h5fname, sigma] = regions
+    return regions
+
+
 class TrackRegion(object):
 
-    def __init__(self, loc, area, val, ispeak):
+    def __init__(self, loc, area, val, ispeak, region):
         self.loc = tuple(loc)
         self.area = area
         self.val = val
         self.ispeak = ispeak
+        self.region = region
 
     def __eq__(self, other):
         return (self.loc == other.loc and
@@ -103,3 +135,16 @@ def track_regions_greedy(tslice_to_regions, nx, ny):
             if r1 not in tracks:
                 tracks[r1] = [(t1, r1)]
     return tracks.values()
+
+def chop_tracks(tracks, area_frac=0.1):
+    new_tracks = []
+    for tr in tracks:
+        new_tr = [tr[0]]
+        for (idx0, reg0), (idx1, reg1) in zip(tr, tr[1:]):
+            if abs(reg0.area-reg1.area) / min(reg0.area, reg1.area) < area_frac:
+                new_tr.append((idx1, reg1))
+            else:
+                new_tracks.append(new_tr)
+                new_tr = [(idx1, reg1)]
+        new_tracks.append(new_tr)
+    return new_tracks

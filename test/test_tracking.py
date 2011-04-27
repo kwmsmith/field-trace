@@ -1,96 +1,29 @@
-from os import path
+import numpy as np
 import tables
 import tracking
-from tracking import TrackRegion
-import _critical_points as _cp
-from cPickle import load, dump
+
+from tracking import extract_regions
 
 from contour_tree import wraparound_dist
 
 import pylab as pl
 
-from scipy.ndimage.filters import gaussian_filter
+h5fname = '/Users/ksmith/Research/thesis/data/high-time-res/data.h5'
 
-def get_cached_surfs(h5fname, sigma=None, force=False):
-    saved_name = path.realpath(h5fname)+'_pickled_snets'
-    if not force:
-        try:
-            fh = open(saved_name, 'rb')
-        except IOError:
-            pass
-        else:
-            surfs = load(fh)
-            sigma = load(fh)
-            fh.close()
-            return surfs, sigma
-    # rebuild the regions list.
+def track_regions_image(slice_regions, h5fname, sigma):
+    tslice_to_regions = extract_regions(h5fname, sigma=sigma)
     dta = tables.openFile(h5fname, 'r')
-    psigp = dta.getNode('/psi')._v_children
-    surfs = []
-    for psi_arr_name in sorted(psigp):
-        print psi_arr_name
-        psi_arr = psigp[psi_arr_name].read()
-        if sigma is not None:
-            psi_arr = gaussian_filter(psi_arr, sigma=sigma, mode='wrap')
-        surf = _cp.TopoSurface(psi_arr)
-        surfs.append(surf)
-    dta.close()
-    with open(saved_name, 'w') as fh:
-        dump(surfs, fh)
-        dump(sigma, fh)
-    return surfs, sigma
-
-def extract_regions(h5fname, sigma=None):
-    dta = tables.openFile(h5fname, 'r')
-    psigp = dta.getNode('/psi')._v_children
-    regions = []
-    for idx, psi_arr_name in enumerate(sorted(psigp)):
-        print psi_arr_name
-        psi_arr = psigp[psi_arr_name].read()
-        if sigma is not None:
-            psi_arr = gaussian_filter(psi_arr, sigma=sigma, mode='wrap')
-        surf = _cp.TopoSurface(psi_arr)
-        # surf.simplify_surf_network(surf.get_peak_pit_region_area, threshold=100)
-        psi_regions = surf.get_minmax_regions()
-        tslice = []
-        for (cpt, type) in psi_regions:
-            area = len(psi_regions[cpt, type])
-            minmax = psi_arr[cpt]
-            tslice.append(TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak')))
-        regions.append((idx, tslice))
-    dta.close()
-    return regions
-
-def extract_regions_cached(h5fname, sigma=None, force=False):
-    saved_name = path.realpath(h5fname)+'_pickled_regions'
-    if not force:
-        try:
-            fh = open(saved_name, 'rb')
-        except IOError:
-            pass
-        else:
-            regions = load(fh)
-            sigma = load(fh)
-            fh.close()
-            return regions, sigma
-    # rebuild the regions list.
-    regions = extract_regions(h5fname, sigma=sigma)
-    with open(saved_name, 'w') as fh:
-        dump(regions, fh)
-        dump(sigma, fh)
-    return regions, sigma
-
-def track_regions_image(slice_pts, h5fname, sigma):
-    tslice_to_regions = extract_regions('data.h5', sigma=sigma)
-    dta = tables.openFile(h5fname, 'r')
-    psigp = dta.getNode('/psi')._v_children
     pl.ioff()
-    for idx, psi_arr_name in enumerate(sorted(psigp)):
+    for idx, psi_arr in enumerate(dta.walkNodes('/psi', 'Array')):
         print idx
-        psi_arr = psigp[psi_arr_name].read()
+        psi_arr = psi_arr.read()
+        psi_arr_mask = psi_arr.copy()
+        for (reg, num) in slice_regions[idx]:
+            psi_arr_mask[zip(*reg.region)] = 2*psi_arr.max()
         pl.figure()
-        pl.imshow(psi_arr, interpolation='nearest', cmap='hot')
-        for (loc, num) in slice_pts[idx]:
+        pl.imshow(psi_arr_mask, interpolation='nearest', cmap='hot')
+        for (reg, num) in slice_regions[idx]:
+            loc = reg.loc
             pl.text(loc[1], loc[0], str(num))
         xs = [reg.loc[0] for reg in tslice_to_regions[idx][1]]
         ys = [reg.loc[1] for reg in tslice_to_regions[idx][1]]
@@ -132,20 +65,23 @@ def plot_track_props(tracks, nx, ny):
     pl.savefig("delta_dists.pdf")
     pl.close('all')
 
-def get_slice_pts(tracks):
+def get_slice_regions(tracks):
     from collections import defaultdict
-    slice_pts = defaultdict(list)
+    slice_regions = defaultdict(list)
     tracks = [tr for tr in tracks if len(tr) > 2]
     for num, tr in enumerate(tracks):
         for idx, reg in tr:
-            slice_pts[idx].append((reg.loc, num))
-    return slice_pts
+            slice_regions[idx].append((reg, num))
+    return slice_regions
+
 
 def test_track_greedy():
     nx, ny = 512, 512
-    sigma = 4.0
-    tslice_to_regions = extract_regions('data.h5', sigma=sigma)
+    sigma = 8.0
+    tslice_to_regions = extract_regions(h5fname, sigma=sigma)
+
     tracks = tracking.track_regions_greedy(tslice_to_regions, nx, ny)
-    slice_pts = get_slice_pts(tracks)
+    tracks = tracking.chop_tracks(tracks, area_frac=0.1)
+    slice_regions = get_slice_regions(tracks)
     plot_track_props(tracks, nx, ny)
-    track_regions_image(slice_pts, 'data.h5', sigma=sigma)
+    track_regions_image(slice_regions, h5fname, sigma=sigma)

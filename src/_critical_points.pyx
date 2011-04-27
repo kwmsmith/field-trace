@@ -33,7 +33,7 @@ cdef int connect_diagonal(double a, double b, double c, double d):
     # return AC
 
 DEF NNBRS = 6
-cdef void neighbors6(int x, int y, int nx, int ny, int *result):
+cdef void _neighbors6(int x, int y, int nx, int ny, int *result):
     '''
     result is a 12 element integer array that holds the neighbor's x & y components.
     '''
@@ -54,6 +54,11 @@ cdef void neighbors6(int x, int y, int nx, int ny, int *result):
 
     result[10] = x
     result[11] = (y-1+ny) % ny
+
+def neighbors6(int x, int y, int nx, int ny):
+    cdef np.ndarray[np.int32_t, ndim=2] result = np.empty((NNBRS,2), dtype=np.int32)
+    _neighbors6(x, y, nx, ny, <int*>result.data)
+    return [tuple(r) for r in result]
 
 class graph(object):
 
@@ -119,7 +124,7 @@ cdef _get_highest_neighbor(np.ndarray[double, ndim=2] arr, node):
     cdef int i, highest_x, highest_y
     nx = arr.shape[0]
     ny = arr.shape[1]
-    neighbors6(node[0], node[1], nx, ny, nbrs)
+    _neighbors6(node[0], node[1], nx, ny, nbrs)
     cdef double highest_val = -1e100, val
     for i in range(NNBRS):
         val = arr[nbrs[2*i], nbrs[2*i+1]]
@@ -134,7 +139,7 @@ cdef _get_lowest_neighbor(np.ndarray[double, ndim=2] arr, node):
     cdef int i, lowest_x, lowest_y
     nx = arr.shape[0]
     ny = arr.shape[1]
-    neighbors6(node[0], node[1], nx, ny, nbrs)
+    _neighbors6(node[0], node[1], nx, ny, nbrs)
     cdef double lowest_val = 1e100, val
     for i in range(NNBRS):
         val = arr[nbrs[2*i], nbrs[2*i+1]]
@@ -194,7 +199,7 @@ class TopoSurface(object):
         cdef set region = set([node])
         cdef list frontier = []
         cdef int nbrs[NNBRS*2]
-        neighbors6(node[0], node[1], self.nx, self.ny, nbrs)
+        _neighbors6(node[0], node[1], self.nx, self.ny, nbrs)
         for i in range(NNBRS):
             n = nbrs[i*2], nbrs[(2*i)+1]
             frontier.append((self.node_height(n, sign=sign), n))
@@ -206,7 +211,7 @@ class TopoSurface(object):
             region.add(n)
             if n in passes:
                 break
-            neighbors6(n[0], n[1], self.nx, self.ny, nbrs)
+            _neighbors6(n[0], n[1], self.nx, self.ny, nbrs)
             for i in range(NNBRS):
                 nbr = nbrs[2*i], nbrs[2*i+1]
                 if nbr not in region and nbr not in frontier_set:
@@ -225,7 +230,7 @@ class TopoSurface(object):
         cdef set passes = set()
         for ix in range(self.nx):
             for iy in range(self.ny):
-                neighbors6(ix, iy, self.nx, self.ny, nbrs)
+                _neighbors6(ix, iy, self.nx, self.ny, nbrs)
                 node_val = arr[ix, iy]
                 node = (ix, iy)
                 for ii in range(NNBRS):
@@ -257,7 +262,7 @@ class TopoSurface(object):
     
     def nearest_extrema(self, pss):
         cdef int pass_nbrs[2*NNBRS]
-        neighbors6(pss[0], pss[1], self.nx, self.ny, pass_nbrs)
+        _neighbors6(pss[0], pss[1], self.nx, self.ny, pass_nbrs)
         peaks_n_pits = self.crit_pts.peaks.union(self.crit_pts.pits)
         connected_peaks = set()
         connected_pits = set()
