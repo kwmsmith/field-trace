@@ -52,6 +52,43 @@ def get_seed_points(region, arr, nseeds, reverse=False):
     seeds = ordered_pts[0:-1:step]
     return [s[1] for s in seeds]
 
+def flux_tube_radial_scatter(region, minmax_pt, arr):
+    wdist = wraparound_dist_vec(*arr.shape)
+    region = list(region)
+    dists = []
+    vals = []
+    region_arr = np.array(region, dtype=np.int)
+    xs = region_arr[:,0]
+    ys = region_arr[:,1]
+    dists = wdist(minmax_pt[0], minmax_pt[1], xs, ys)
+    vals = arr[xs, ys]
+    return (dists, vals)
+
+def flux_tube_radial_spokes(region, minmax_pt, arr, peak_or_pit):
+    nx, ny = arr.shape
+    ctr_max = nx+ny
+    frontier = set()
+    for pt in region:
+        for nbr in _cp.neighbors6(pt[0], pt[1], nx, ny):
+            if nbr not in region:
+                frontier.add(pt)
+    spokes = []
+    for pt in frontier:
+        cur = pt
+        spoke = [cur]
+        if peak_or_pit == 'peak': next = _cp._get_highest_neighbor
+        elif peak_or_pit == 'pit': next = _cp._get_lowest_neighbor
+        else: raise ValueError("peak_or_pit not in ('peak', 'pit')")
+        ctr = ctr_max
+        while ctr > 0:
+            cur = next(arr, cur)
+            spoke.append(cur)
+            if cur == minmax_pt:
+                spokes.append(spoke)
+                break
+            ctr -= 1
+    return spokes
+
 def flux_tube_radial_profile(region, minmax_pt, surf, peak_or_pit,
         other_arr=None, mask=None):
     arr = surf.arr
@@ -83,8 +120,39 @@ def flux_tube_radial_profile(region, minmax_pt, surf, peak_or_pit,
                 (seed, seed_flux, lset_mean, lset_err, dists_mean, dists_err))
     return radial_profile
 
-def expand_region(surf, region, ntimes):
-    arr = surf.arr
+def expand_region_circ(arr, region, minmax, extra=0.0):
+    wdist = wraparound_dist_vec(*arr.shape)
+    region_arr = np.array(list(region), dtype=np.int)
+    xs = region_arr[:,0]
+    ys = region_arr[:,1]
+    dists = wdist(minmax[0], minmax[1], xs, ys)
+    maxdist = max(dists)
+    return expand_region_to_radius(arr, region, maxdist+extra, minmax)
+
+def expand_region_to_radius(arr, region, radius, minmax):
+    nx, ny = arr.shape
+    wdist = wraparound_dist_vec(nx, ny)
+    frontier = set()
+    new_region = set(region)
+    for pt in region:
+        nbrs = _cp.neighbors6(pt[0], pt[1], nx, ny)
+        for nbr in nbrs:
+            if nbr not in region and wdist(minmax[0], minmax[1], nbr[0], nbr[1]) <= radius:
+                frontier.add(nbr)
+                new_region.add(nbr)
+    # new_region.update(frontier)
+    while frontier:
+        new_frontier = set()
+        for pt in frontier:
+            nbrs = _cp.neighbors6(pt[0], pt[1], nx, ny)
+            for nbr in nbrs:
+                if nbr not in new_region and wdist(minmax[0], minmax[1], nbr[0], nbr[1]) <= radius:
+                    new_frontier.add(nbr)
+        frontier = new_frontier
+        new_region.update(frontier)
+    return new_region
+
+def expand_region(arr, region, ntimes):
     nx, ny = arr.shape
     frontier = set()
     new_region = set(region)
@@ -112,7 +180,7 @@ def radial_profiles(surf, threshold, other_arr=None, expand_regions=0, mask=None
         if len(region) < threshold:
             continue
         if expand_regions:
-            region = expand_region(surf, region, expand_regions)
+            region = expand_region(surf.arr, region, expand_regions)
         rprofile = flux_tube_radial_profile(region, cpt, surf,
                 peak_or_pit=peak_or_pit, other_arr=other_arr, mask=mask)
         cpt2rprof[cpt] = (rprofile, region)

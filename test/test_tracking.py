@@ -8,7 +8,8 @@ from contour_tree import wraparound_dist
 
 import pylab as pl
 
-h5fname = '/Users/ksmith/Research/thesis/data/high-time-res/data.h5'
+# h5fname = '/Users/ksmith/Research/thesis/data/high-time-res/data.h5'
+h5fname = '/Users/ksmith/Research/thesis/data/large-rhos2-peak-10/data.h5'
 
 def track_regions_image(slice_regions, h5fname, sigma):
     tslice_to_regions = extract_regions(h5fname, sigma=sigma)

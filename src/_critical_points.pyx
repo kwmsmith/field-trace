@@ -119,7 +119,7 @@ def sort_by_h(gr, arr):
         sgr[node] = h_sort
     return sgr
 
-cdef _get_highest_neighbor(np.ndarray[double, ndim=2] arr, node):
+cpdef _get_highest_neighbor(np.ndarray[double, ndim=2] arr, node):
     cdef int nbrs[2*NNBRS]
     cdef int i, highest_x, highest_y
     nx = arr.shape[0]
@@ -134,7 +134,7 @@ cdef _get_highest_neighbor(np.ndarray[double, ndim=2] arr, node):
             highest_y = nbrs[2*i+1]
     return highest_x, highest_y
 
-cdef _get_lowest_neighbor(np.ndarray[double, ndim=2] arr, node):
+cpdef _get_lowest_neighbor(np.ndarray[double, ndim=2] arr, node):
     cdef int nbrs[2*NNBRS]
     cdef int i, lowest_x, lowest_y
     nx = arr.shape[0]
@@ -181,10 +181,18 @@ class TopoSurface(object):
 
     def get_minmax_regions(self):
         passes = self.crit_pts.passes
-        pit_regions = dict([((pit, 'pit'), self.get_minmax_region(pit, passes)) \
-                for pit in self.crit_pts.pits])
-        peak_regions = dict([((peak, 'peak'), self.get_minmax_region(peak, passes)) \
-                for peak in self.crit_pts.peaks])
+        pit_regions = {}
+        for pit in self.crit_pts.pits:
+            reg, pss = self.get_minmax_region(pit, passes)
+            pit_regions[pit, pss, 'pit'] = reg
+        peak_regions = {}
+        for peak in self.crit_pts.peaks:
+            reg, pss = self.get_minmax_region(peak, passes)
+            peak_regions[peak, pss, 'peak'] = reg
+        # pit_regions = dict([((pit, pss, 'pit'), reg) for reg, pss in self.get_minmax_region(pit, passes) \
+                # for pit in self.crit_pts.pits])
+        # peak_regions = dict([((peak, pss, 'peak'), reg) for reg, pss in self.get_minmax_region(peak, passes) \
+                # for peak in self.crit_pts.peaks])
         all_regions = pit_regions
         all_regions.update(peak_regions)
         return all_regions
@@ -205,11 +213,13 @@ class TopoSurface(object):
             frontier.append((self.node_height(n, sign=sign), n))
         cdef set frontier_set = set([n for h,n in frontier])
         heapq.heapify(frontier)
+        nearest_pass = None
         while True:
             h, n = heapq.heappop(frontier)
             frontier_set.remove(n)
             region.add(n)
             if n in passes:
+                nearest_pass = n
                 break
             _neighbors6(n[0], n[1], self.nx, self.ny, nbrs)
             for i in range(NNBRS):
@@ -217,7 +227,7 @@ class TopoSurface(object):
                 if nbr not in region and nbr not in frontier_set:
                     frontier_set.add(nbr)
                     heapq.heappush(frontier, (self.node_height(nbr, sign=sign), nbr))
-        return region
+        return region, nearest_pass
 
     def get_crit_pts(self):
         cdef np.ndarray[double, ndim=2] arr = self.arr

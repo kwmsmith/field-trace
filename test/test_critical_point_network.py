@@ -1,8 +1,9 @@
+from composite_vis import visualize
 from scipy import ndimage
 import numpy as np
 
-import _critical_points as _cp
-from upsample import upsample
+from field_trace import _critical_points as _cp
+from field_trace.upsample import upsample
 
 from nose.tools import eq_, ok_, set_trace
 
@@ -103,61 +104,6 @@ def test_critical_points():
     for _ in range(1):
         yield _tester, random_periodic_upsample(128, 4, seed=_), False
 
-def visualize(
-        arr,
-        mesh=None,
-        crit_pts=None,
-        surf_network=None,
-        len_lim=None,
-        cmap=None,
-        ncontours=None,
-        new_fig=True,
-        save_fig=None,
-        exts=('.eps', '.png', '.pdf')
-        ):
-
-    # import pylab as pl
-    if new_fig:
-        fig = pl.figure()
-    # pl.imshow(arr, interpolation='nearest', cmap='jet')
-    pl.imshow(arr, cmap=cmap, interpolation='nearest')
-    pl.colorbar(pad=0.0, shrink=0.9)
-    if ncontours is not None:
-        pl.contour(arr, ncontours, linewidths=2, cmap=pl.cm.hot)
-    nx, ny = arr.shape
-    if mesh is not None:
-        for i in range(1, nx-1):
-            for j in range(1, ny-1):
-                other_pts = mesh._g[i,j]
-                for x,y in other_pts:
-                    pl.plot([j,y], [i,x], 'k--')
-    if surf_network is not None:
-        for node in surf_network:
-            node_x, node_y = node
-            nbrs = surf_network[node]
-            for nbr in nbrs:
-                nbr_x, nbr_y = nbr
-                if len_lim and abs(node_y-nbr_y) < nx /2 and abs(node_x-nbr_x) < ny /2:
-                    pl.plot([node_y, nbr_y], [node_x, nbr_x], 'k--', linewidth=2)
-    if crit_pts is not None:
-        size=70
-        pits, passes, peaks = crit_pts.pits, crit_pts.passes, crit_pts.peaks
-        X = [_[0] for _ in pits]
-        Y = [_[1] for _ in pits]
-        pl.scatter(Y, X, marker='o', c='b', s=size)
-        X = [_[0] for _ in peaks]
-        Y = [_[1] for _ in peaks]
-        pl.scatter(Y, X, marker='s', c='r', s=size)
-        X = [_[0] for _ in passes]
-        Y = [_[1] for _ in passes]
-        pl.scatter(Y, X, marker='d', c='k', s=size)
-    if new_fig:
-        pl.figure(fig.number)
-    else:
-        pl.figure(pl.gcf().number)
-    if save_fig:
-        for ext in exts:
-            pl.savefig(save_fig+ext)
 
 def compare_graphs(g1, g2):
     g1_unordered = dict((k, set(v)) for (k, v) in g1.items())
@@ -278,3 +224,4 @@ def _test_reeb3():
     node2h = lambda n: node2h_map[n]
     reeb_gr = _cp.get_reeb_graph(surf_net, crit_pts, node2h)
     set_trace()
+
