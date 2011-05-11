@@ -1,4 +1,5 @@
 import pylab as pl
+from field_trace.region_analysis import expand_regions
 from composite_vis import visualize
 import _critical_points as _cp
 import numpy as np
