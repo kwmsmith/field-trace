@@ -1,3 +1,4 @@
+from itertools import izip
 import field_trace
 from numpy import pi
 import _critical_points as _cp
@@ -56,14 +57,22 @@ def vis_mag_shear(h5fname):
 
 def rad_scatter_driver(h5fname):
     dta = tables.openFile(h5fname, 'r')
-    for idx, psi_arr in enumerate(dta.walkNodes('/psi', 'Array')):
+    walkers = [dta.walkNodes('/psi', 'Array'),
+               dta.walkNodes('/cur', 'Array'),
+               dta.walkNodes('/den', 'Array')]
+    for idx, arrs in enumerate(izip(*walkers)):
         if idx < 100: continue
+        psi_arr, cur_arr, den_arr = arrs
         print psi_arr.name
         psi_arr = psi_arr.read()
         psi_arr = psi_arr.astype(np.double)
+        den_arr = den_arr.read()
+        den_arr = den_arr.astype(np.double)
+        cur_arr = cur_arr.read()
+        cur_arr = cur_arr.astype(np.double)
         # psi_arr = gaussian_filter(psi_arr, sigma=SIGMA, mode='wrap')
         # mag_shear_rad_scatter(psi_arr)
-        mag_shear_theta_sectors(psi_arr)
+        mag_shear_theta_sectors(psi_arr, cur_arr, den_arr)
         # mag_shear_rad_spokes(psi_arr)
     dta.close()
 
@@ -195,70 +204,129 @@ def theta_sectors(arr, x0, y0, region, nr=None, ntheta=None):
         theta_sectors[tbin] = dta
     return theta_sectors.values()
 
-def mag_shear_theta_sectors(psi_arr):
-    ntheta = 4
+# for these fields, do an image plot & a radial profile plot:
+
+# \psi
+# J
+# B_theta
+# B_shear
+# Gaussian Curvature
+# n
+# grad n
+# |V|
+
+def plot_theta_sectors(ax, field, minmax, region, ntheta, title, xvis=False):
+    th_sectors = theta_sectors(field, minmax[0], minmax[1], region, ntheta=ntheta)
+    for sect in th_sectors:
+        ax.plot(sect['r'], sect['val'], 's-')
+        ax.errorbar(sect['r'], sect['val'],
+                xerr=sect['rstd'], yerr=sect['valstd'])
+    ax.grid()
+    if not xvis:
+        ax.tick_params(labelbottom=False)
+    # ax.title(title)
+    return th_sectors
+
+def plot_sect_derivs_by_r(sectors, title):
+    for sect in sectors:
+        delta_r = np.diff(sect['r'])
+        delta_btheta_by_r = np.diff(sect['val']/sect['r'])
+        deriv = delta_btheta_by_r / delta_r
+        pl.plot(sect['r'][:-1]+delta_r/2, deriv, 'o-')
+    pl.grid()
+    pl.title(title)
+
+def field_region_image(ax, field, region, minmax, lset, title, xvis=False):
+    nx, ny = field.shape
+    cx, cy = nx/2, ny/2
+    dx = minmax[0] - cx
+    dy = minmax[1] - cy
+    lsetx, lsety = lset.xs, lset.ys
+    xs, ys = zip(*region)
+    f_cpy = np.zeros_like(field)
+    f_cpy[xs, ys] = field[xs, ys]
+    f_cpy[lsetx, lsety] = 1.1 * f_cpy.min()
+    f_cpy = np.roll(f_cpy, shift=-dx, axis=0)
+    f_cpy = np.roll(f_cpy, shift=-dy, axis=1)
+    xs, ys = np.where(f_cpy)
+    xmin, xmax = xs.min(), xs.max()
+    ymin, ymax = ys.min(), ys.max()
+    ax.imshow(f_cpy, interpolation='nearest', cmap='hot')
+    ax.set_xlim(xmin-2, xmax+2)
+    ax.set_ylim(ymin-2, ymax+2)
+    ax.set_ylabel(title, size='xx-large', rotation='horizontal')
+    if not xvis:
+        ax.tick_params(labelbottom=False)
+
+def mag_shear_theta_sectors(psi_arr, cur, den):
+    import matplotlib.gridspec as gridspec
+    from kaw_analysis.curvature import hessian
+    hess = hessian(psi_arr)
+    ntheta = 2
     nx, ny = psi_arr.shape
     psi_grad_x, psi_grad_y = gradient(psi_arr)
     bmag = np.sqrt(psi_grad_x**2 + psi_grad_y**2)
+    den_x, den_y = gradient(den)
+    den_grad_mag = np.sqrt(den_x**2 + den_y**2)
     pl.ion()
     pl.figure()
     pl.imshow(bmag, interpolation='nearest', cmap='hot')
     surf = _cp.TopoSurface(psi_arr)
     regions = surf.get_minmax_regions()
-    pl.figure()
+    fig = pl.figure(figsize=(9,12))
+    nr = 6
+    nc = 2
     for (minmax, pss, type), region in regions.items():
         if len(region) < 100:
             continue
+        gs = gridspec.GridSpec(nr, nc, width_ratios=[1,2], hspace=0.0)
         nbr_func = lambda t: _cp.neighbors6(t[0], t[1], nx, ny)
         lset = field_trace._level_set(psi_arr, level_val=psi_arr[pss],
                 position=pss, neighbors_func=nbr_func)
         bx = -psi_grad_y
         by = psi_grad_x
         br, btheta = cartesian_to_polar(bx, by, minmax[0], minmax[1])
-        region = expand_region_circ(psi_arr, region, minmax, extra=10.0)
+        region = expand_region_circ(psi_arr, region, minmax, extra=2.0)
         lset = lset.intersection(region)
-        lsetx, lsety = lset.xs, lset.ys
-        btheta_sectors = theta_sectors(btheta, minmax[0], minmax[1], region, ntheta=ntheta)
-        pl.subplot(221)
-        for sect in btheta_sectors:
-            pl.plot(sect['r'], sect['val'], 's-')
-            pl.errorbar(sect['r'], sect['val'],
-                    xerr=sect['rstd'], yerr=sect['valstd'])
-        pl.grid()
-        pl.title(r'$B_{\theta}$ vs. $r$')
-        pl.subplot(222)
-        # tot_shear = total_shear(bx, by, minmax[0], minmax[1])
-        # tot_shear_sectors = theta_sectors(tot_shear, minmax[0], minmax[1], region, ntheta=ntheta)
-        for sect in btheta_sectors:
-            delta_r = np.diff(sect['r'])
-            delta_btheta_by_r = np.diff(sect['val']/sect['r'])
-            deriv = delta_btheta_by_r / delta_r
-            pl.plot(sect['r'][:-1]+delta_r/2, deriv, 'o-')
-            # pl.errorbar(sect['r'], sect['val'],
-                    # xerr=sect['rstd'], yerr=sect['valstd'])
-        pl.grid()
-        pl.title(r'$\partial_{r} \frac{B_{\theta}}{r}$ vs. $r$')
-        # nonlin_shear = (shears - bmags / dists) / dists
-        # pl.scatter(dists, nonlin_shear, c='b', marker='s', label=r'$\nabla_{\perp}B$')
-        xs, ys = zip(*region)
-        pl.subplot(234)
-        psi_cpy = np.zeros_like(psi_arr)
-        psi_cpy[xs, ys] = psi_arr[xs, ys]
-        psi_cpy[lsetx, lsety] = 1.1 * psi_cpy.min()
-        pl.imshow(psi_cpy, interpolation='nearest', cmap='hot')
-        pl.title(r'$\psi$')
-        pl.subplot(235)
-        btheta_cpy = np.zeros_like(btheta)
-        btheta_cpy[xs, ys] = btheta[xs, ys]
-        btheta_cpy[lsetx, lsety] = 1.1 * btheta_cpy.min()
-        pl.imshow(btheta_cpy, interpolation='nearest', cmap='hot')
-        pl.title(r'$B_{\theta}$')
-        pl.subplot(236)
-        bmag_cpy = np.zeros_like(bmag)
-        bmag_cpy[xs, ys] = bmag[xs, ys]
-        bmag_cpy[lsetx, lsety] = 1.1 * bmag_cpy.min()
-        pl.imshow(bmag_cpy, interpolation='nearest', cmap='hot')
-        pl.title(r'$|B|$')
+        # psi
+        ax = pl.subplot(gs[0])
+        ax.set_title("Field & separatrix", size='x-large')
+        field_region_image(ax, psi_arr, region, minmax, lset, title=r'$\psi$')
+        # ax = pl.subplot2grid((nr, nc), (0, 1))
+        ax = pl.subplot(gs[1])
+        ax.set_title(r"Field vs. $r$", size='x-large')
+        plot_theta_sectors(ax, psi_arr, minmax, region, ntheta, title=r'$\psi$ vs. $r$')
+        # b_theta
+        ax = pl.subplot(gs[2])
+        field_region_image(ax, btheta, region, minmax, lset, title=r'$B_{\theta}$')
+        ax = pl.subplot(gs[3])
+        btheta_sectors = plot_theta_sectors(ax, btheta, minmax, region, ntheta, title=r'$B_{\theta}$ vs. $r$')
+        # b_shear
+        # pl.subplot(nr, nc, 5)
+        # field_region_image(btheta, region, minmax, lset, title=r'$B_{\theta}$')
+        # pl.subplot(nr, nc, 6)
+        # plot_sect_derivs_by_r(btheta_sectors, title=r'$\partial_{r} \frac{B_{\theta}}{r}$ vs. $r$')
+        # den
+        ax = pl.subplot(gs[4])
+        field_region_image(ax, den, region, minmax, lset, title=r'$n$')
+        ax = pl.subplot(gs[5])
+        plot_theta_sectors(ax, den, minmax, region, ntheta, title=r'$n$ vs. $r$')
+        # den_grad
+        ax = pl.subplot(gs[6])
+        field_region_image(ax, den_grad_mag, region, minmax, lset, title=r'$|\nabla n|$')
+        ax = pl.subplot(gs[7])
+        plot_theta_sectors(ax, den_grad_mag, minmax, region, ntheta, title=r'$|\nabla n|$ vs. $r$')
+        # cur
+        ax = pl.subplot(gs[8])
+        field_region_image(ax, cur, region, minmax, lset, title=r'$J$')
+        ax = pl.subplot(gs[9])
+        plot_theta_sectors(ax, cur, minmax, region, ntheta, title=r'$J$ vs. $r$')
+        # hessian
+        ax = pl.subplot(gs[10])
+        field_region_image(ax, hess, region, minmax, lset, title=r'$H(\psi)$', xvis=True)
+        ax = pl.subplot(gs[11])
+        ax.set_xlabel(r'$r$ (norm. units)', size='x-large')
+        plot_theta_sectors(ax, hess, minmax, region, ntheta, title=r'$H(\psi)$ vs. $r$', xvis=True)
         raw_input('enter to continue')
         pl.clf()
     pl.close('all')
