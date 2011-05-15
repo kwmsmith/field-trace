@@ -217,6 +217,7 @@ def theta_sectors(arr, x0, y0, region, nr=None, ntheta=None):
 
 def plot_theta_sectors(ax, field, minmax, region, ntheta, title, xvis=False):
     th_sectors = theta_sectors(field, minmax[0], minmax[1], region, ntheta=ntheta)
+    ax.axhline(y=0, color='orange', linewidth=4)
     for sect in th_sectors:
         ax.plot(sect['r'], sect['val'], 's-')
         ax.errorbar(sect['r'], sect['val'],
