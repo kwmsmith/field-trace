@@ -3,12 +3,15 @@ import field_trace
 from numpy import pi
 import _critical_points as _cp
 from scipy.ndimage import gaussian_filter
+from scipy.stats import linregress
 import numpy as np
 import pylab as pl
+import matplotlib.gridspec as gridspec
 import tables
 from kaw_analysis.vcalc import gradient
 from region_analysis import radial_profiles, flux_tube_radial_scatter, expand_region_circ, flux_tube_radial_spokes
 from contour_tree import wraparound_dist_vec
+from kaw_analysis.curvature import hessian
 
 # from test_tracking import h5fname
 
@@ -55,14 +58,25 @@ def vis_mag_shear(h5fname):
         pl.savefig('mshear_%03d.pdf' % idx)
     dta.close()
 
-def rad_scatter_driver(h5fname):
+def names2strs(names):
+    if isinstance(names[0], int):
+        names = ['_{0:07d}'.format(n) for n in names]
+    return names
+
+def struct_radius_scatter_driver(h5fname, names, savebase):
+    names = names2strs(names)
     dta = tables.openFile(h5fname, 'r')
     walkers = [dta.walkNodes('/psi', 'Array'),
                dta.walkNodes('/cur', 'Array'),
                dta.walkNodes('/den', 'Array')]
+    bs = []
+    ns= []
+    cur= []
+    gden= []
     for idx, arrs in enumerate(izip(*walkers)):
-        if idx < 100: continue
         psi_arr, cur_arr, den_arr = arrs
+        if psi_arr.name not in names:
+            continue
         print psi_arr.name
         psi_arr = psi_arr.read()
         psi_arr = psi_arr.astype(np.double)
@@ -70,10 +84,101 @@ def rad_scatter_driver(h5fname):
         den_arr = den_arr.astype(np.double)
         cur_arr = cur_arr.read()
         cur_arr = cur_arr.astype(np.double)
-        # psi_arr = gaussian_filter(psi_arr, sigma=SIGMA, mode='wrap')
-        # mag_shear_rad_scatter(psi_arr)
-        mag_shear_theta_sectors(psi_arr, cur_arr, den_arr)
-        # mag_shear_rad_spokes(psi_arr)
+        nx, ny = psi_arr.shape
+        res = struct_radius_scatter(psi_arr, cur_arr, den_arr)
+        bs.extend(res['bmag'])
+        ns.extend(res['den'])
+        cur.extend(res['cur'])
+        gden.extend(res['den_grad'])
+
+    dta.close()
+
+    bs = np.array(bs) * np.pi * 2. / nx
+    ns = np.array(ns) * np.pi * 2. / nx
+    cur = np.array(cur) * np.pi * 2. / nx
+    gden = np.array(gden) * np.pi * 2. / nx
+
+    def _fcn(x, y, x_text, y_text, savename, c='b', marker='o'):
+        pl.figure()
+        pl.subplot(111, aspect='equal')
+        title = r'${0}$ vs. ${1}$'.format(y_text, x_text)
+        pl.scatter(x, y, c=c, marker=marker, label=title)
+        slope, intcpt, r, p, stderr = linregress(x, y)
+        pl.grid()
+        pl.title(title)
+        pl.xlabel(r'${0}$'.format(x_text))
+        pl.ylabel(r'${0}$'.format(y_text))
+        x0, x1 = min(x), max(x) * 0.9
+        y0, y1 = intcpt + slope * x0, intcpt + slope * x1
+        label = r'${y}= {m:3.2f} {x}$, $C^2={c:3.2f}$'.format(y=y_text, x=x_text, m=slope, c=r**2)
+        pl.plot([x0, x1], [y0, y1], 'r-', linewidth=5, label=label)
+        ymin, ymax = pl.ylim()
+        pl.ylim(0.0, ymax)
+        xmin, xmax = pl.xlim()
+        pl.xlim(0.0, xmax)
+        pl.legend(loc='lower right')
+        pl.savefig(savename)
+
+
+    templ = r'\langle {0} \rangle/\rho_s'
+
+    _fcn(ns, bs, x_text=templ.format('r_n'), y_text=templ.format('r_B'),
+            savename='%s/rb-vs-rn.pdf' % savebase, c='b', marker='o')
+    _fcn(ns, cur, x_text=templ.format('r_n'), y_text=templ.format('r_J'),
+            savename='%s/rj-vs-rn.pdf' % savebase, c='g', marker='d')
+    _fcn(ns, gden, x_text=templ.format('r_n'), y_text=templ.format(r'r_{\nabla n}'),
+            savename='%s/gden-vs-rn.pdf' % savebase, c='r', marker='<')
+    _fcn(bs, cur, x_text=templ.format('r_B'), y_text=templ.format('r_J'),
+            savename='%s/rj-vs-rb.pdf' % savebase, c='k', marker='>')
+
+    def log_plotter(x, ys, x_text, y_texts, savename, cs, markers):
+        pl.figure()
+        ax = pl.subplot(111)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        for y, y_text, c, marker in zip(ys, y_texts, cs, markers):
+            title = r'${0}$ vs. ${1}$'.format(y_text, x_text)
+            ax.scatter(x, y, c=c, marker=marker, label=title)
+        pl.grid()
+        y_labels = ', '.join([r'${0}$'.format(y_text) for y_text in y_texts])
+        pl.title(r'{0} vs. ${1}$'.format(y_labels, x_text))
+        pl.xlabel(r'${0}$'.format(x_text))
+        pl.ylabel(r'{0}'.format(y_labels))
+        ymin, ymax = pl.ylim()
+        pl.ylim(1.0, ymax)
+        xmin, xmax = pl.xlim()
+        pl.xlim(1.0, xmax)
+        pl.legend(loc='lower right')
+        pl.savefig(savename)
+
+    # log_plotter(
+            # x=ns,
+            # ys=[bs, cur, gden],
+            # x_text=templ.format(r'r_n'),
+            # y_texts=[templ.format(rf) for rf in ('r_B', 'r_J', r'r_{\nabla n}')],
+            # cs='b g r'.split(),
+            # markers='o d <'.split(),
+            # savename='%s/all-log.pdf' % savebase,
+            # )
+
+def theta_sectors_driver(h5fname, names, save_basename):
+    names = names2strs(names)
+    dta = tables.openFile(h5fname, 'r')
+    walkers = [dta.walkNodes('/psi', 'Array'),
+               dta.walkNodes('/cur', 'Array'),
+               dta.walkNodes('/den', 'Array')]
+    for idx, arrs in enumerate(izip(*walkers)):
+        psi_arr, cur_arr, den_arr = arrs
+        if psi_arr.name not in names:
+            continue
+        print psi_arr.name
+        psi_arr = psi_arr.read()
+        psi_arr = psi_arr.astype(np.double)
+        den_arr = den_arr.read()
+        den_arr = den_arr.astype(np.double)
+        cur_arr = cur_arr.read()
+        cur_arr = cur_arr.astype(np.double)
+        mag_shear_theta_sectors(psi_arr, cur_arr, den_arr, save_basename=save_basename)
     dta.close()
 
 def cartesian_to_polar_coords(x0, y0, nx, ny):
@@ -165,15 +270,55 @@ def mag_shear_rad_spokes(psi_arr):
         pl.clf()
     pl.close('all')
 
-def theta_sectors(arr, x0, y0, region, nr=None, ntheta=None):
+def integrate_theta(arr, x0, y0, nr):
     nx, ny = arr.shape
     X, Y, R, theta = cartesian_to_polar_coords(x0, y0, nx, ny)
-    idx0, idx1 = zip(*region)
-    # idx0, idx1 = np.where(R<=rmax)
-    Rs = R[idx0, idx1]
+    rmax = R.max()
+    rbins = (R / rmax * (nr -1)).astype(np.int32)
+    rbins = rbins.flatten()
+    # import pylab as pl
+    # pl.ion()
+    # pl.imshow(rbins, interpolation='nearest', cmap='hot')
+    # raw_input('enter to continue')
+    R = R.flatten()
+    vals = arr.flatten()
+    nr = nr or int(rmax+1)
+    # ntheta = ntheta or 1
+    dta = zip(rbins, R, vals)
+    def mapper(elm):
+        rbin, r, v = elm
+        return (rbin), (r, v)
+    def reducer(gp):
+        dta = np.array(gp,
+                dtype=[('r', np.float), ('val', np.float)])
+        rs = dta['r']
+        vals = dta['val']
+        return (rs.mean(), rs.std(), vals.mean(), vals.std())
+    from map_reduce import map_reduce
+    mr_res = map_reduce(dta, mapper, reducer)
+    dta = np.array(mr_res.values(),
+            dtype=[('r', np.float),   ('rstd', np.float),
+                   ('val', np.float), ('valstd', np.float)])
+    dta.sort(order=['r'])
+    return dta
+
+def theta_sectors(arr, x0, y0, region=None, nr=None, ntheta=None):
+    '''
+    if region is None: use the entire array.
+    '''
+    nx, ny = arr.shape
+    X, Y, R, theta = cartesian_to_polar_coords(x0, y0, nx, ny)
+    if region is None:
+        Rs = R.flatten()
+        thetas = theta.flatten()
+        vals = arr.flatten()
+    else:
+        idx0, idx1 = zip(*region)
+        # idx0, idx1 = np.where(R<=rmax)
+        Rs = R[idx0, idx1]
+        thetas = theta[idx0, idx1]
+        vals = arr[idx0, idx1]
     rmax = Rs.max()
-    thetas = theta[idx0, idx1]
-    vals = arr[idx0, idx1]
     nr = nr or int(rmax+1)
     ntheta = ntheta or 1
     rbins = (Rs / rmax * (nr - 1)).astype(np.int32)
@@ -215,17 +360,46 @@ def theta_sectors(arr, x0, y0, region, nr=None, ntheta=None):
 # grad n
 # |V|
 
+def r_moment(rs, vals, valstds):
+    vals = np.abs(vals)
+    # vals -= vals[-1]
+    drs = np.diff(rs)
+    upstairs = 0.0
+    downstairs = 0.0
+    for r, valstd, val, dr in zip(rs, valstds, vals, drs):
+        upstairs += r * val * dr
+        downstairs += val * dr
+    return upstairs / downstairs
+
+def fluct_perc_vs_r(rs, vals, valstds):
+    vals = np.abs(vals)
+    vals -= vals.min()
+    drs = np.diff(rs)
+    tot = 0.0
+    fluct_vs_r = []
+    for r, valstd, val, dr in zip(rs, valstds, vals, drs):
+        tot += r * dr * np.abs(val)
+        fluct_vs_r.append(tot)
+    fluct_vs_r = np.array(fluct_vs_r)
+    fluct_vs_r /= fluct_vs_r.max()
+    return fluct_vs_r
+
 def plot_theta_sectors(ax, field, minmax, region, ntheta, title, xvis=False):
+    nx, ny = field.shape
     th_sectors = theta_sectors(field, minmax[0], minmax[1], region, ntheta=ntheta)
-    ax.axhline(y=0, color='orange', linewidth=4)
     for sect in th_sectors:
-        ax.plot(sect['r'], sect['val'], 's-')
-        ax.errorbar(sect['r'], sect['val'],
-                xerr=sect['rstd'], yerr=sect['valstd'])
+        rs = sect['r'] * 2 * np.pi / nx
+        rstd = sect['rstd'] * 2 * np.pi / nx
+        # sect_norm = np.max(np.abs(sect['val']))
+        rad = r_moment(rs, sect['val'], sect['valstd'])
+        ax.plot(rs, sect['val'], 's-')
+        ax.errorbar(rs, sect['val'],
+                xerr=rstd, yerr=sect['valstd'])
+        ax.axvline(x=rad, color='red', linewidth=4)
+        ax.axhline(y=0, color='orange', linewidth=4)
     ax.grid()
     if not xvis:
         ax.tick_params(labelbottom=False)
-    # ax.title(title)
     return th_sectors
 
 def plot_sect_derivs_by_r(sectors, title):
@@ -259,9 +433,7 @@ def field_region_image(ax, field, region, minmax, lset, title, xvis=False):
     if not xvis:
         ax.tick_params(labelbottom=False)
 
-def mag_shear_theta_sectors(psi_arr, cur, den):
-    import matplotlib.gridspec as gridspec
-    from kaw_analysis.curvature import hessian
+def struct_radius_scatter(psi_arr, cur, den):
     hess = hessian(psi_arr)
     ntheta = 2
     nx, ny = psi_arr.shape
@@ -269,17 +441,46 @@ def mag_shear_theta_sectors(psi_arr, cur, den):
     bmag = np.sqrt(psi_grad_x**2 + psi_grad_y**2)
     den_x, den_y = gradient(den)
     den_grad_mag = np.sqrt(den_x**2 + den_y**2)
-    pl.ion()
-    pl.figure()
-    pl.imshow(bmag, interpolation='nearest', cmap='hot')
     surf = _cp.TopoSurface(psi_arr)
     regions = surf.get_minmax_regions()
-    fig = pl.figure(figsize=(9,12))
+    res = {}
+    for (minmax, pss, type), region in regions.items():
+        if len(region) < 50: continue
+        name_2_field = {'bmag': [bmag],
+                        'den': [den],
+                        'cur': [cur],
+                        'psi': [psi_arr],
+                        'hess': [hess],
+                        'den_grad': [den_grad_mag],
+                        }
+        for name, (field,) in name_2_field.items():
+            th_sector = theta_sectors(field, minmax[0], minmax[1], region, ntheta=2)[0]
+            field_radius = r_moment(th_sector['r'],th_sector['val'], th_sector['valstd'])
+            res.setdefault(name, []).append(field_radius)
+    return res
+
+def mag_shear_theta_sectors(psi_arr, cur, den, thresh=100, save_basename='field-vs-r'):
+    hess = hessian(psi_arr)
+    ntheta = 2
+    nx, ny = psi_arr.shape
+    psi_grad_x, psi_grad_y = gradient(psi_arr)
+    bmag = np.sqrt(psi_grad_x**2 + psi_grad_y**2)
+    den_x, den_y = gradient(den)
+    den_grad_mag = np.sqrt(den_x**2 + den_y**2)
+    # pl.ion()
+    # pl.figure()
+    # pl.imshow(bmag, interpolation='nearest', cmap='hot')
+    surf = _cp.TopoSurface(psi_arr)
+    regions = surf.get_minmax_regions()
+    pl.figure(figsize=(9,12))
     nr = 6
     nc = 2
+    ctr = 0
     for (minmax, pss, type), region in regions.items():
-        if len(region) < 100:
+        if len(region) < thresh:
             continue
+        ctr += 1
+        print ctr
         gs = gridspec.GridSpec(nr, nc, width_ratios=[1,2], hspace=0.0)
         nbr_func = lambda t: _cp.neighbors6(t[0], t[1], nx, ny)
         lset = field_trace._level_set(psi_arr, level_val=psi_arr[pss],
@@ -295,40 +496,43 @@ def mag_shear_theta_sectors(psi_arr, cur, den):
         field_region_image(ax, psi_arr, region, minmax, lset, title=r'$\psi$')
         # ax = pl.subplot2grid((nr, nc), (0, 1))
         ax = pl.subplot(gs[1])
-        ax.set_title(r"Field vs. $r$", size='x-large')
-        plot_theta_sectors(ax, psi_arr, minmax, region, ntheta, title=r'$\psi$ vs. $r$')
+        ax.set_title(r"Field vs. $r/\rho_s$ (id={0})".format(ctr), size='x-large')
+        plot_theta_sectors(ax, psi_arr, minmax, region, ntheta, title=r'$\psi$ vs. $r/\rho_s$')
         # b_theta
         ax = pl.subplot(gs[2])
-        field_region_image(ax, btheta, region, minmax, lset, title=r'$B_{\theta}$')
+        # field_region_image(ax, btheta, region, minmax, lset, title=r'$B_{\theta}$')
+        field_region_image(ax, bmag, region, minmax, lset, title=r'$|B|$')
         ax = pl.subplot(gs[3])
-        btheta_sectors = plot_theta_sectors(ax, btheta, minmax, region, ntheta, title=r'$B_{\theta}$ vs. $r$')
+        # btheta_sectors = plot_theta_sectors(ax, btheta, minmax, region, ntheta, title=r'$B_{\theta}$ vs. $r/\rho_s$')
+        plot_theta_sectors(ax, bmag, minmax, region, ntheta, title=r'$|B|$ vs. $r/\rho_s$')
         # b_shear
         # pl.subplot(nr, nc, 5)
         # field_region_image(btheta, region, minmax, lset, title=r'$B_{\theta}$')
         # pl.subplot(nr, nc, 6)
-        # plot_sect_derivs_by_r(btheta_sectors, title=r'$\partial_{r} \frac{B_{\theta}}{r}$ vs. $r$')
+        # plot_sect_derivs_by_r(btheta_sectors, title=r'$\partial_{r} \frac{B_{\theta}}{r}$ vs. $r/\rho_s$')
         # den
         ax = pl.subplot(gs[4])
         field_region_image(ax, den, region, minmax, lset, title=r'$n$')
         ax = pl.subplot(gs[5])
-        plot_theta_sectors(ax, den, minmax, region, ntheta, title=r'$n$ vs. $r$')
+        plot_theta_sectors(ax, den, minmax, region, ntheta, title=r'$n$ vs. $r/\rho_s$')
         # den_grad
         ax = pl.subplot(gs[6])
         field_region_image(ax, den_grad_mag, region, minmax, lset, title=r'$|\nabla n|$')
         ax = pl.subplot(gs[7])
-        plot_theta_sectors(ax, den_grad_mag, minmax, region, ntheta, title=r'$|\nabla n|$ vs. $r$')
+        plot_theta_sectors(ax, den_grad_mag, minmax, region, ntheta, title=r'$|\nabla n|$ vs. $r/\rho_s$')
         # cur
         ax = pl.subplot(gs[8])
         field_region_image(ax, cur, region, minmax, lset, title=r'$J$')
         ax = pl.subplot(gs[9])
-        plot_theta_sectors(ax, cur, minmax, region, ntheta, title=r'$J$ vs. $r$')
+        plot_theta_sectors(ax, cur, minmax, region, ntheta, title=r'$J$ vs. $r/\rho_s$')
         # hessian
         ax = pl.subplot(gs[10])
         field_region_image(ax, hess, region, minmax, lset, title=r'$H(\psi)$', xvis=True)
         ax = pl.subplot(gs[11])
-        ax.set_xlabel(r'$r$ (norm. units)', size='x-large')
-        plot_theta_sectors(ax, hess, minmax, region, ntheta, title=r'$H(\psi)$ vs. $r$', xvis=True)
-        raw_input('enter to continue')
+        ax.set_xlabel(r'$r/\rho_s$', size='x-large')
+        plot_theta_sectors(ax, hess, minmax, region, ntheta, title=r'$H(\psi)$ vs. $r/\rho_s$', xvis=True)
+        # raw_input('enter to continue')
+        pl.savefig('{0}_{1:04d}.pdf'.format(save_basename, ctr))
         pl.clf()
     pl.close('all')
 
@@ -422,6 +626,5 @@ def save_mshear_rad_profs(h5fname):
 
 if __name__ == '__main__':
     h5fname = '/Users/ksmith/Research/thesis/data/large-rhos2-peak-10/data.h5'
-    # save_mshear_rad_profs(h5fname)
-    rad_scatter_driver(h5fname)
-    # save_mshear_rad_profs(h5fname)
+    theta_sectors_driver(h5fname, [1000], save_basename='structure-many-fields/field-vs-r')
+    # struct_radius_scatter_driver(h5fname, range(900, 1010, 10))

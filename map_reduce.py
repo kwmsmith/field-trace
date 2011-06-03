@@ -1,5 +1,5 @@
 ## http://code.activestate.com/recipes/577676/ (r8)
-from collections import namedtuple
+# from collections import namedtuple
 
 def map_reduce(data, mapper, reducer=None):
     '''Simple map/reduce for data analysis.
