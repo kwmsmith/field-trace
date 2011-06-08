@@ -373,6 +373,12 @@ def growth_tree(mesh, seed_pts):
             # set the last region point for the region
             # detect mergers.
 
+def wraparound_dist_1d(nx):
+    def _wraparound_dist(u, v):
+        dx = abs(u - v)
+        dx = np.where(dx > nx/2, -dx + nx, dx)
+        return np.abs(dx)
+    return _wraparound_dist
 
 def wraparound_dist(nx, ny):
     def _wraparound_dist(u, v):
