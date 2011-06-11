@@ -33,7 +33,7 @@ def track_regions_image(slice_regions, h5fname, sigma):
         pl.close('all')
     dta.close()
 
-def plot_track_props(tracks, nx, ny):
+def plot_track_props(tracks, nx, ny, len_cutoff=20):
     pl.ioff()
     wdist = wraparound_dist(nx, ny)
     val_fig = pl.figure()
@@ -42,6 +42,7 @@ def plot_track_props(tracks, nx, ny):
     delta_vals = []
     delta_dists = []
     for tr in tracks:
+        if len(tr) < len_cutoff: continue
         idxs, regs = zip(*tr)
         delta_vals.extend([abs(regs[idx].val-regs[idx+1].val) for idx in range(len(regs)-1)])
         dists = [wdist(regs[i].loc, regs[i+1].loc) for i in range(len(regs)-1)]
@@ -75,14 +76,12 @@ def get_slice_regions(tracks):
             slice_regions[idx].append((reg, num))
     return slice_regions
 
-
 def test_track_greedy():
     nx, ny = 512, 512
-    sigma = 8.0
+    sigma = None
     tslice_to_regions = extract_regions(h5fname, sigma=sigma)
 
     tracks = tracking.track_regions_greedy(tslice_to_regions, nx, ny)
     tracks = tracking.chop_tracks(tracks, area_frac=0.1)
     slice_regions = get_slice_regions(tracks)
-    plot_track_props(tracks, nx, ny)
     track_regions_image(slice_regions, h5fname, sigma=sigma)

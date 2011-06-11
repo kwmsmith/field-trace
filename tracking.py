@@ -4,6 +4,8 @@ import tables
 from contour_tree import wraparound_dist_vec, wraparound_dist
 import numpy as np
 
+from itertools import izip
+
 def get_dist_map(regions_0, regions_1, nx, ny):
     wdist = wraparound_dist_vec(nx, ny)
     dist_map = np.empty((len(regions_0), len(regions_1)), dtype=np.float_)
@@ -55,7 +57,11 @@ def extract_regions(h5fname, sigma=None):
         return regions
     dta = tables.openFile(h5fname, 'r')
     regions = []
-    for idx, psi_arr in enumerate(dta.walkNodes('/psi', 'Array')):
+    idx = 0
+    for psi_arr, den_arr, cur_arr in izip(
+                dta.walkNodes('/psi', 'Array'),
+                dta.walkNodes('/den', 'Array'),
+                dta.walkNodes('/cur', 'Array')):
         psi_arr_name = psi_arr.name
         psi_arr = psi_arr.read()
         print psi_arr_name
@@ -65,12 +71,16 @@ def extract_regions(h5fname, sigma=None):
         # surf.simplify_surf_network(surf.get_peak_pit_region_area, threshold=100)
         psi_regions = surf.get_minmax_regions()
         tslice = []
-        for (cpt, type) in psi_regions:
-            region = psi_regions[cpt, type]
-            area = len(psi_regions[cpt, type])
+        for (cpt, pss, type), region in psi_regions.items():
+            area = len(region)
             minmax = psi_arr[cpt]
-            tslice.append(TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak'), region=region))
+            treg = TrackRegion(loc=cpt, area=area, val=minmax, ispeak=(type=='peak'), region=region)
+            treg.psi_val = minmax
+            treg.den_val = den_arr[cpt]
+            treg.cur_val = cur_arr[cpt]
+            tslice.append(treg)
         regions.append((idx, tslice))
+        idx += 1
     dta.close()
     _extract_regions_cache[h5fname, sigma] = regions
     return regions
@@ -148,3 +158,63 @@ def chop_tracks(tracks, area_frac=0.1):
                 new_tr = [(idx1, reg1)]
         new_tracks.append(new_tr)
     return new_tracks
+
+import pylab as pl
+
+def plot_areas_vs_longevity(tracks, nx, ny):
+    # wdist = wraparound_dist(nx, ny)
+    area_time = []
+    for tr in tracks:
+        idxs, regs = zip(*tr)
+        # mean_area = np.mean([reg.area for reg in regs])
+        min_area = min([reg.area for reg in regs])
+        # max_area = max([reg.area for reg in regs])
+        # gmean_area = gmean([reg.area for reg in regs])
+        area_time.append((min_area, len(idxs)))
+    areas, times = zip(*area_time)
+    pl.scatter(times, areas, c='k', marker='o')
+    pl.grid()
+    pl.savefig('areas_v_longevity.pdf')
+
+def plot_track_field_vals(tracks, len_cutoff, name_base=''):
+    psi_fig, den_fig, cur_fig = pl.figure(), pl.figure(), pl.figure()
+    for tr in tracks:
+        if len(tr) < len_cutoff: continue
+        idxs, regs = zip(*tr)
+        pl.figure(psi_fig.number)
+        pl.plot(idxs, [reg.psi_val for reg in regs], 's-', hold=True)
+        pl.figure(den_fig.number)
+        pl.plot(idxs, [reg.den_val for reg in regs], 's-', hold=True)
+        pl.figure(cur_fig.number)
+        pl.plot(idxs, [reg.cur_val for reg in regs], 's-', hold=True)
+
+    def saver(fig, savename, fieldname):
+        pl.figure(fig.number)
+        pl.grid()
+        xlabel = r'$t$ (norm. units)'
+        ylabel = r'{0} at structure core (norm. units)'.format(fieldname)
+        title = r'{0} at structure core vs. $t$'.format(fieldname)
+        pl.xlabel(xlabel)
+        pl.ylabel(ylabel)
+        pl.title(title)
+        pl.savefig(savename)
+
+    saver(psi_fig, "{0}_psi_v_time.pdf".format(name_base), r'$\psi$')
+    saver(den_fig, "{0}_den_v_time.pdf".format(name_base), r'$n$')
+    saver(cur_fig, "{0}_cur_v_time.pdf".format(name_base), r'$J$')
+
+def main(h5fname, sigma, savedir='.'):
+    nx, ny = 512, 512
+    tslice_to_regions = extract_regions(h5fname, sigma=sigma)
+
+    tracks = track_regions_greedy(tslice_to_regions, nx, ny)
+    tracks = chop_tracks(tracks, area_frac=0.1)
+    plot_areas_vs_longevity(tracks, nx, ny)
+    plot_track_field_vals(tracks, len_cutoff=80, name_base='{0}/80'.format(savedir))
+    plot_track_field_vals(tracks, len_cutoff=60, name_base='{0}/60'.format(savedir))
+    plot_track_field_vals(tracks, len_cutoff=40, name_base='{0}/40'.format(savedir))
+    plot_track_field_vals(tracks, len_cutoff=20, name_base='{0}/20'.format(savedir))
+
+if __name__ == '__main__':
+    h5fname = '/Users/ksmith/Research/thesis/data/large-rhos2-peak-10/data.h5'
+    main(h5fname, sigma=8.0)
